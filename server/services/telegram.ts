@@ -224,51 +224,49 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
     // Instead, we use the client that is already waiting at the password step.
     if (entry.phoneCodeVerified && password) {
       log("INFO", phoneNumber, "Processing password for existing session");
+      // Use CheckPassword for 2FA instead of client.start() again
+      await client.signin({
+        password: password
+      });
     } else {
       entry.authMethod = "start";
       log("INFO", phoneNumber, "Starting fresh authentication with client.start()");
+      await client.start({
+        phoneNumber: async () => {
+          log("INFO", phoneNumber, "phoneNumber callback invoked");
+          return phoneNumber;
+        },
+        phoneCode: async () => {
+          log("INFO", phoneNumber, "phoneCode callback invoked", { codeLength: code.length });
+          return code;
+        },
+        password: async () => {
+          log("INFO", phoneNumber, "password callback invoked", { hasPassword: !!password });
+          if (!password) {
+            // Mark that we're now at password verification stage
+            entry.isVerifyingPassword = true;
+            entry.phoneCodeVerified = true;
+            entry.phoneCode = code;
+            log("WARN", phoneNumber, "Password required - stopping here");
+            throw new Error("PASSWORD_REQUIRED");
+          }
+          log("INFO", phoneNumber, "password callback returning 2FA password");
+          return password;
+        },
+        onError: (err: any) => {
+          // Handle common errors gracefully within start()
+          if (err.message === "PASSWORD_REQUIRED") return;
+          
+          log("ERROR", phoneNumber, "client.start() error callback", {
+            errorMessage: err.message,
+            errorCode: err.code
+          });
+          // We don't rethrow here to let the main try/catch handle it
+        }
+      });
     }
     
-    await client.start({
-      phoneNumber: async () => {
-        log("INFO", phoneNumber, "phoneNumber callback invoked");
-        return phoneNumber;
-      },
-      phoneCode: async () => {
-        log("INFO", phoneNumber, "phoneCode callback invoked", { codeLength: code.length });
-        // If we are at password stage and using CheckPassword, this won't even be called.
-        // But client.start() might still call it if it thinks it needs it.
-        if (entry.phoneCodeVerified && entry.phoneCode) {
-          return entry.phoneCode;
-        }
-        return code;
-      },
-      password: async () => {
-        log("INFO", phoneNumber, "password callback invoked");
-        if (!password) {
-          // Mark that we're now at password verification stage
-          entry.isVerifyingPassword = true;
-          entry.phoneCodeVerified = true;
-          entry.phoneCode = code;
-          log("WARN", phoneNumber, "Password required - stopping here");
-          throw new Error("PASSWORD_REQUIRED");
-        }
-        log("INFO", phoneNumber, "password callback returning 2FA password");
-        return password;
-      },
-      onError: (err: any) => {
-        // Handle common errors gracefully within start()
-        if (err.message === "PASSWORD_REQUIRED") return;
-        
-        log("ERROR", phoneNumber, "client.start() error callback", {
-          errorMessage: err.message,
-          errorCode: err.code
-        });
-        throw err;
-      }
-    });
-    
-    log("SUCCESS", phoneNumber, "client.start() completed successfully");
+    log("SUCCESS", phoneNumber, "Authentication flow completed successfully");
 
     const sessionString = (client.session as StringSession).save();
     log("INFO", phoneNumber, "Session string generated successfully", {
