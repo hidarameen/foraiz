@@ -45,7 +45,7 @@ export default function SessionsPage() {
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ delay: idx * 0.05 }}
             >
-              <Card className="hover-elevate h-full flex flex-col justify-between group">
+              <Card className="hover-elevate h-full flex flex-col justify-between group bg-card dark:bg-card">
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between mb-4">
                     <div className="p-3 bg-primary/10 rounded-xl text-primary border border-primary/20">
@@ -56,11 +56,11 @@ export default function SessionsPage() {
                       <span className="text-xs font-semibold text-green-600 dark:text-green-400">متصل</span>
                     </div>
                   </div>
-                  <h3 className="text-xl font-bold mb-1">{session.sessionName}</h3>
+                  <h3 className="text-xl font-bold mb-1 text-card-foreground">{session.sessionName}</h3>
                   <p className="text-sm font-medium text-muted-foreground">{session.phoneNumber}</p>
                 </CardContent>
                 
-                <CardContent className="border-t pt-4 flex items-center justify-between bg-muted/20">
+                <CardContent className="border-t pt-4 flex items-center justify-between bg-muted/20 dark:bg-muted/10">
                   <p className="text-xs text-muted-foreground">
                     آخر ظهور: {session.lastActive ? format(new Date(session.lastActive), 'MMM d, HH:mm') : 'غير متوفر'}
                   </p>

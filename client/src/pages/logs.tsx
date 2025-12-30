@@ -41,7 +41,7 @@ export default function LogsPage() {
         </div>
       </div>
 
-      <Card className="overflow-hidden border-none shadow-xl bg-card/50 backdrop-blur-sm">
+      <Card className="overflow-hidden border shadow-sm bg-card">
         <CardHeader className="border-b bg-muted/30 px-6 py-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <CardTitle className="text-lg font-bold flex items-center gap-2">
@@ -53,7 +53,7 @@ export default function LogsPage() {
                 placeholder="بحث في السجلات..." 
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="h-10 pr-10 rounded-lg bg-background/50"
+                className="h-10 pr-10 rounded-lg bg-background/50 border-muted"
               />
             </div>
           </div>
@@ -63,27 +63,27 @@ export default function LogsPage() {
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow className="hover:bg-transparent border-b">
-                  <TableHead className="w-[180px] font-bold">الطابع الزمني</TableHead>
-                  <TableHead className="font-bold">المصدر</TableHead>
-                  <TableHead className="font-bold">الهدف</TableHead>
-                  <TableHead className="w-[120px] font-bold">الحالة</TableHead>
-                  <TableHead className="font-bold">التفاصيل</TableHead>
+                  <TableHead className="w-[180px] font-bold text-foreground">الطابع الزمني</TableHead>
+                  <TableHead className="font-bold text-foreground">المصدر</TableHead>
+                  <TableHead className="font-bold text-foreground">الهدف</TableHead>
+                  <TableHead className="w-[120px] font-bold text-foreground">الحالة</TableHead>
+                  <TableHead className="font-bold text-foreground">التفاصيل</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredLogs?.map((log) => (
-                  <TableRow key={log.id} className="hover:bg-muted/30 transition-colors">
+                  <TableRow key={log.id} className="hover:bg-muted/30 transition-colors border-b">
                     <TableCell className="text-sm font-medium text-muted-foreground">
                       {log.timestamp ? format(new Date(log.timestamp), "yyyy-MM-dd HH:mm:ss") : "--"}
                     </TableCell>
-                    <TableCell className="font-mono text-xs truncate max-w-[150px] font-semibold">{log.sourceChannel}</TableCell>
-                    <TableCell className="font-mono text-xs truncate max-w-[150px] font-semibold">{log.destinationChannel}</TableCell>
+                    <TableCell className="font-mono text-xs truncate max-w-[150px] font-semibold text-card-foreground">{log.sourceChannel}</TableCell>
+                    <TableCell className="font-mono text-xs truncate max-w-[150px] font-semibold text-card-foreground">{log.destinationChannel}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className={`
                         rounded-full px-2.5 py-0.5 border shadow-sm font-bold
-                        ${log.status === 'success' ? 'border-green-500/30 text-green-600 bg-green-500/10 dark:text-green-400' : ''}
-                        ${log.status === 'failed' ? 'border-red-500/30 text-red-600 bg-red-500/10 dark:text-red-400' : ''}
-                        ${log.status === 'skipped' ? 'border-yellow-500/30 text-yellow-600 bg-yellow-500/10 dark:text-yellow-400' : ''}
+                        ${log.status === 'success' ? 'border-green-500/30 text-green-600 bg-green-500/10 dark:text-green-400 dark:bg-green-500/5' : ''}
+                        ${log.status === 'failed' ? 'border-red-500/30 text-red-600 bg-red-500/10 dark:text-red-400 dark:bg-red-500/5' : ''}
+                        ${log.status === 'skipped' ? 'border-yellow-500/30 text-yellow-600 bg-yellow-500/10 dark:text-yellow-400 dark:bg-yellow-500/5' : ''}
                       `}>
                         {log.status === 'success' ? 'ناجح' : log.status === 'failed' ? 'فشل' : 'تخطى'}
                       </Badge>
