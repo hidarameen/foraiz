@@ -7,8 +7,8 @@ import { z } from "zod";
 // Replit Auth User
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  replitId: integer("replit_id").unique(), // Optional: if utilizing raw Replit ID
   username: text("username").notNull().unique(),
+  password: text("password").notNull(),
   displayName: text("display_name"),
   roles: text("roles").array().default(["user"]), // admin, user
   createdAt: timestamp("created_at").defaultNow(),
@@ -77,6 +77,10 @@ export const logs = pgTable("logs", {
 
 // === BASE SCHEMAS ===
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
+export const loginSchema = z.object({
+  username: z.string().min(3, "Username must be at least 3 characters"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
 export const insertSessionSchema = createInsertSchema(sessions).omit({ id: true, createdAt: true, lastActive: true });
 export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true, createdAt: true, status: true, errorMessage: true });
 export const insertLogSchema = createInsertSchema(logs).omit({ id: true, timestamp: true });

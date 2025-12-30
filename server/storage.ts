@@ -1,13 +1,19 @@
 import { db } from "./db";
 import { 
-  sessions, tasks, logs,
+  users, sessions, tasks, logs,
   type Session, type InsertSession,
   type Task, type InsertTask,
-  type Log, type InsertLog
+  type Log, type InsertLog,
+  type User, type InsertUser
 } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 
 export interface IStorage {
+  // Users
+  getUser(id: number): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+
   // Sessions
   getSessions(): Promise<Session[]>;
   getSession(id: number): Promise<Session | undefined>;
@@ -27,6 +33,22 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  // === USERS ===
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
   // === SESSIONS ===
   async getSessions(): Promise<Session[]> {
     return await db.select().from(sessions);
