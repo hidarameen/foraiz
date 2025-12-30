@@ -34,7 +34,7 @@ const navItems = [
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-  const { user, logoutMutation } = useAuth();
+  const { user, logout } = useAuth();
   const { theme, setTheme } = useTheme();
 
   const style = {
@@ -104,7 +104,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => logoutMutation.mutate()}
+                  onClick={() => logout()}
                   className="rounded-lg h-9 w-9 text-destructive hover:text-destructive hover:bg-destructive/10"
                   title="تسجيل الخروج"
                 >
@@ -115,18 +115,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </SidebarFooter>
         </Sidebar>
 
-        <main className="flex-1 flex flex-col min-w-0 relative overflow-hidden">
-          <header className="h-16 border-b flex flex-row-reverse items-center justify-between px-6 bg-background/80 backdrop-blur-md sticky top-0 z-30">
-            <div className="flex flex-row-reverse items-center gap-4">
+        <main className="flex-1 flex flex-col min-w-0 relative overflow-hidden bg-background">
+          <header className="h-16 border-b flex flex-row-reverse items-center justify-between px-4 md:px-6 bg-background/80 backdrop-blur-md sticky top-0 z-30">
+            <div className="flex flex-row-reverse items-center gap-2 md:gap-4">
               <SidebarTrigger className="h-9 w-9" />
-              <div className="h-4 w-[1px] bg-border mx-2 hidden md:block" />
-              <h2 className="text-sm font-medium text-muted-foreground hidden md:block text-right">
+              <div className="h-4 w-[1px] bg-border mx-1 md:mx-2 hidden sm:block" />
+              <h2 className="text-sm font-medium text-muted-foreground hidden sm:block text-right truncate max-w-[150px] md:max-w-none">
                 {navItems.find(i => i.href === location)?.label || "الصفحة الرئيسية"}
               </h2>
             </div>
           </header>
-          <div className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-            <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
+          <div className="flex-1 overflow-auto p-3 sm:p-4 md:p-6 lg:p-8">
+            <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 md:space-y-8">
               {children}
             </div>
           </div>

@@ -1,4 +1,4 @@
-import { TelegramClient } from "telegram";
+import { TelegramClient, Api } from "telegram";
 import { StringSession } from "telegram/sessions";
 import { storage } from "../storage";
 
@@ -50,23 +50,27 @@ export async function signIn(phoneNumber: string, phoneCodeHash: string, code: s
   await client.connect();
 
   try {
-    await client.signIn({
-      phoneNumber,
-      phoneCodeHash,
-      phoneCode: code,
-      password: async () => password || "",
-      onError: (err: any) => {
-        if (err.message.includes("SESSION_PASSWORD_NEEDED") && !password) {
-          throw new Error("PASSWORD_REQUIRED");
-        }
-        throw err;
-      },
-    } as any);
+    await client.invoke(
+      new Api.auth.SignIn({
+        phoneNumber,
+        phoneCodeHash,
+        phoneCode: code,
+      })
+    );
 
     const sessionString = (client.session as StringSession).save();
     return sessionString;
   } catch (err: any) {
-    if (err.message === "PASSWORD_REQUIRED") throw err;
+    if (err.message.includes("SESSION_PASSWORD_NEEDED")) {
+      if (!password) {
+        throw new Error("PASSWORD_REQUIRED");
+      }
+      await client.signIn({
+        password: async () => password,
+      } as any);
+      const sessionString = (client.session as StringSession).save();
+      return sessionString;
+    }
     throw new Error(err.message || "Failed to sign in");
   } finally {
     await client.disconnect();
