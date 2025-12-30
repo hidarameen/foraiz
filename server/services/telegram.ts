@@ -77,38 +77,38 @@ export async function signIn(phoneNumber: string, phoneCodeHash: string, code: s
   const client = entry.client;
 
   try {
-    // Attempt standard sign in
-    try {
-      await client.invoke(
-        new Api.auth.SignIn({
-          phoneNumber,
-          phoneCodeHash,
-          phoneCode: code,
-        })
-      );
-    } catch (err: any) {
-      // Check if 2FA is needed
-      if (err.message.includes("SESSION_PASSWORD_NEEDED")) {
-        if (!password) {
-          // Keep the client alive for the next call with password
-          throw new Error("PASSWORD_REQUIRED");
+    // Check if 2FA is needed based on state or previous attempt
+    if (password) {
+        await (client as any).signIn({
+            phoneNumber,
+            phoneCodeHash,
+            phoneCode: code,
+            password: async () => password,
+            onError: (err: any) => {
+                throw err;
+            }
+        });
+    } else {
+        try {
+          await client.invoke(
+            new Api.auth.SignIn({
+              phoneNumber,
+              phoneCodeHash,
+              phoneCode: code,
+            })
+          );
+        } catch (err: any) {
+          if (err.message.includes("SESSION_PASSWORD_NEEDED")) {
+             throw new Error("PASSWORD_REQUIRED");
+          } else {
+            throw err;
+          }
         }
-        
-        // Use the existing client to complete 2FA
-        await client.signIn({
-          password: async () => password,
-        } as any);
-      } else {
-        throw err;
-      }
     }
 
     // Success! Save the session
     const sessionString = (client.session as StringSession).save();
     
-    // We don't disconnect here if we want to move it to activeClients immediately, 
-    // but for now let's disconnect to keep it clean, as the forwarder service 
-    // will create its own client when needed.
     await client.disconnect();
     pendingClients.delete(phoneNumber);
     
