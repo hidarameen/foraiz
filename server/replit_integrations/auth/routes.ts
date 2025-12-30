@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { storage } from "../../storage";
-import { loginSchema } from "@shared/schema";
+import { loginSchema, telegramLoginSchema } from "@shared/schema";
 import { z } from "zod";
 import bcryptjs from "bcryptjs";
 
