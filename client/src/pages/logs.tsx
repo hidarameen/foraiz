@@ -1,73 +1,113 @@
 import { useLogs } from "@/hooks/use-logs";
-import { CyberCard } from "@/components/ui/cyber-card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, History, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useState } from "react";
 
 export default function LogsPage() {
-  const { data: logs, isLoading, refetch, isRefetching } = useLogs({ limit: "50" });
+  const { data: logs, isLoading, refetch, isRefetching } = useLogs({ limit: "100" });
+  const [search, setSearch] = useState("");
 
-  if (isLoading) return <div className="flex items-center justify-center h-full"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+  const filteredLogs = logs?.filter(log => 
+    log.sourceChannel?.toLowerCase().includes(search.toLowerCase()) ||
+    log.destinationChannel?.toLowerCase().includes(search.toLowerCase()) ||
+    log.details?.toLowerCase().includes(search.toLowerCase()) ||
+    log.status?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  if (isLoading) return <div className="flex items-center justify-center h-full py-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
 
   return (
-    <>
-      <div className="flex items-center justify-between gap-4 mb-8">
-        <div className="flex flex-col gap-2">
-          <h2 className="text-3xl font-display uppercase tracking-widest text-white">System Logs</h2>
-          <div className="h-1 w-24 bg-gradient-to-r from-primary to-transparent rounded-full" />
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-3xl font-bold tracking-tight">سجلات النظام</h1>
+          <p className="text-muted-foreground">مراقبة دقيقة لكل عمليات تحويل الرسائل والحالات.</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => refetch()} className="border-primary/20 hover:bg-primary/10 hover:text-primary">
-          <RefreshCw className={`w-4 h-4 mr-2 ${isRefetching ? 'animate-spin' : ''}`} /> Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => refetch()} 
+            disabled={isRefetching}
+            className="h-10 px-4 rounded-lg"
+          >
+            <RefreshCw className={`w-4 h-4 me-2 ${isRefetching ? 'animate-spin' : ''}`} /> تحديث
+          </Button>
+        </div>
       </div>
 
-      <CyberCard className="p-0 overflow-hidden">
-        <div className="max-h-[70vh] overflow-y-auto">
-          <Table>
-            <TableHeader className="bg-black/20 sticky top-0 backdrop-blur-md z-10">
-              <TableRow className="border-white/5 hover:bg-transparent">
-                <TableHead className="font-mono text-primary w-[180px]">Timestamp</TableHead>
-                <TableHead className="font-mono text-primary">Source</TableHead>
-                <TableHead className="font-mono text-primary">Destination</TableHead>
-                <TableHead className="font-mono text-primary w-[100px]">Status</TableHead>
-                <TableHead className="font-mono text-primary">Details</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody className="font-mono text-xs">
-              {logs?.map((log) => (
-                <TableRow key={log.id} className="border-white/5 hover:bg-white/5 transition-colors group">
-                  <TableCell className="text-muted-foreground group-hover:text-white transition-colors">
-                    {log.timestamp ? format(new Date(log.timestamp), "yyyy-MM-dd HH:mm:ss") : "--"}
-                  </TableCell>
-                  <TableCell className="truncate max-w-[150px]">{log.sourceChannel}</TableCell>
-                  <TableCell className="truncate max-w-[150px]">{log.destinationChannel}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={`
-                      ${log.status === 'success' ? 'border-green-500 text-green-400 bg-green-500/10' : ''}
-                      ${log.status === 'failed' ? 'border-red-500 text-red-400 bg-red-500/10' : ''}
-                      ${log.status === 'skipped' ? 'border-yellow-500 text-yellow-400 bg-yellow-500/10' : ''}
-                    `}>
-                      {log.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground max-w-[300px] truncate" title={log.details || ""}>
-                    {log.details || "-"}
-                  </TableCell>
+      <Card className="overflow-hidden border-none shadow-xl bg-card/50 backdrop-blur-sm">
+        <CardHeader className="border-b bg-muted/30 px-6 py-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <CardTitle className="text-lg font-bold flex items-center gap-2">
+              <History className="h-5 w-5 text-primary" /> تفاصيل العمليات
+            </CardTitle>
+            <div className="relative w-full md:w-72">
+              <Search className="absolute right-3 top-3 w-4 h-4 text-muted-foreground" />
+              <Input 
+                placeholder="بحث في السجلات..." 
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-10 pr-10 rounded-lg bg-background/50"
+              />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-muted/50">
+                <TableRow className="hover:bg-transparent border-b">
+                  <TableHead className="w-[180px] font-bold">الطابع الزمني</TableHead>
+                  <TableHead className="font-bold">المصدر</TableHead>
+                  <TableHead className="font-bold">الهدف</TableHead>
+                  <TableHead className="w-[120px] font-bold">الحالة</TableHead>
+                  <TableHead className="font-bold">التفاصيل</TableHead>
                 </TableRow>
-              ))}
-              {(!logs || logs.length === 0) && (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
-                    No logs recorded.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </CyberCard>
-    </>
+              </TableHeader>
+              <TableBody>
+                {filteredLogs?.map((log) => (
+                  <TableRow key={log.id} className="hover:bg-muted/30 transition-colors">
+                    <TableCell className="text-sm font-medium text-muted-foreground">
+                      {log.timestamp ? format(new Date(log.timestamp), "yyyy-MM-dd HH:mm:ss") : "--"}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs truncate max-w-[150px] font-semibold">{log.sourceChannel}</TableCell>
+                    <TableCell className="font-mono text-xs truncate max-w-[150px] font-semibold">{log.destinationChannel}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`
+                        rounded-full px-2.5 py-0.5 border shadow-sm font-bold
+                        ${log.status === 'success' ? 'border-green-500/30 text-green-600 bg-green-500/10 dark:text-green-400' : ''}
+                        ${log.status === 'failed' ? 'border-red-500/30 text-red-600 bg-red-500/10 dark:text-red-400' : ''}
+                        ${log.status === 'skipped' ? 'border-yellow-500/30 text-yellow-600 bg-yellow-500/10 dark:text-yellow-400' : ''}
+                      `}>
+                        {log.status === 'success' ? 'ناجح' : log.status === 'failed' ? 'فشل' : 'تخطى'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground max-w-[300px] truncate" title={log.details || ""}>
+                      {log.details || "-"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {(!filteredLogs || filteredLogs.length === 0) && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-24 text-muted-foreground">
+                      <div className="flex flex-col items-center justify-center space-y-2">
+                        <Search className="h-10 w-10 opacity-20" />
+                        <p>لا توجد سجلات مطابقة للبحث حالياً.</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
