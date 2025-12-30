@@ -87,7 +87,7 @@ export class MessageForwarder {
   }
 
   /**
-   * توجيه ألبوم (مجموعة وسائط)
+   * توجيه ألبوم (مجموعة وسائط) كرسائل جديدة لإخفاء مصدر التوجيه
    */
   async forwardAlbum(
     task: Task,
@@ -104,11 +104,12 @@ export class MessageForwarder {
 
     for (const destination of task.destinationChannels) {
       try {
-        console.log(`[Forwarder] Forwarding album (${messageIds.length} items) to ${destination}`);
+        console.log(`[Forwarder] Sending album (${messageIds.length} items) as new messages to ${destination}`);
         
-        await client.forwardMessages(destination, {
-          messages: messageIds,
-          fromPeer: sourceChatId,
+        // Use sendMessages with grouping to send as new messages (hides forward tag)
+        await client.sendMessage(destination, {
+          file: messageIds.map(id => ({ message: id, fromPeer: sourceChatId })),
+          message: "", // Captions are handled by the media objects
         });
 
         await storage.createLog({
@@ -117,18 +118,18 @@ export class MessageForwarder {
           destinationChannel: destination,
           messageId: `album_${messageIds[0]}`,
           status: "success",
-          details: `Album forwarded successfully (${messageIds.length} items)`,
+          details: `Album sent as new messages successfully (${messageIds.length} items)`,
         });
 
         results.push({
           messageId: `album_${messageIds[0]}`,
           success: true,
-          details: "Album forwarded successfully",
+          details: "Album sent as new messages successfully",
           timestamp: new Date(),
         });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        console.error(`[Forwarder] Failed to forward album to ${destination}:`, errorMessage);
+        console.error(`[Forwarder] Failed to send album to ${destination}:`, errorMessage);
         
         results.push({
           messageId: `album_${messageIds[0]}`,
@@ -159,23 +160,28 @@ export class MessageForwarder {
         throw new Error("No active client for session");
       }
 
-      // If it has media, using forwardMessages is the most reliable way to preserve everything
+      // If it has media, we'll send it as a NEW message using the file property
+      // this hides the "Forwarded from" tag and creates a clean copy
       if (metadata?.hasMedia && metadata?.originalMessageId && metadata?.fromChatId) {
-        console.log(`[Forwarder] Forwarding media message ${metadata.originalMessageId} to ${destination}`);
-        await client.forwardMessages(destination, {
-          messages: [metadata.originalMessageId],
-          fromPeer: metadata.fromChatId,
+        console.log(`[Forwarder] Sending media ${metadata.originalMessageId} as new message to ${destination}`);
+        
+        await client.sendMessage(destination, {
+          file: { message: metadata.originalMessageId, fromPeer: metadata.fromChatId },
+          // Ensure we don't accidentally send a caption twice if it's already in the media
+          // But usually we want to preserve the original message text as the caption
+          message: metadata.originalText || content,
+          formattingEntities: metadata.entities
         });
         
         return {
           messageId: metadata.originalMessageId.toString(),
           success: true,
-          details: "Media message forwarded successfully",
+          details: "Media sent as new message successfully",
           timestamp: new Date(),
         };
       }
 
-      // Fallback to sending text if no media or forwarding failed
+      // Fallback to sending text if no media
       const entity = await client.getEntity(destination);
       const messageOptions: any = {};
 
