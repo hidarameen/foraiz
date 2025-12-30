@@ -50,6 +50,7 @@ const pendingLogins = new Map<string, {
   codeExpiryTime?: number; // Expire codes after 5 minutes
   attemptCount?: number;
   authMethod?: "start" | "password_retry"; // Track which method was last used
+  passwordFailureCount?: number; // Track failed password attempts
 }>();
 
 export async function sendCode(phoneNumber: string) {
@@ -90,7 +91,8 @@ export async function sendCode(phoneNumber: string) {
       timestamp: currentTime,
       phoneCodeHash: result.phoneCodeHash,
       codeExpiryTime: expiryTime,
-      attemptCount: 0
+      attemptCount: 0,
+      passwordFailureCount: 0
     });
     
     log("INFO", phoneNumber, "Pending login stored", {
@@ -154,91 +156,48 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
   log("INFO", phoneNumber, `Attempt #${entry.attemptCount} to sign in`);
 
   try {
-    // Determine which authentication method to use
-    if (entry.phoneCodeVerified && password && entry.authMethod === "start") {
-      // This is a second call with password after PASSWORD_REQUIRED response
-      // We should NOT call client.start() again, instead use signInWithPassword
-      log("INFO", phoneNumber, "Phone code already verified in previous request, using password verification");
-      entry.authMethod = "password_retry";
-      
-      try {
-        log("INFO", phoneNumber, "Attempting to verify password directly");
-        // Use the client's invoke method to call CheckPassword API
-        const result = await (client as any).invoke(
-          new Api.auth.CheckPassword({
-            password: new Api.InputCheckPasswordSRP({
-              srpId: (client as any)._passwordSrpId,
-              a: (client as any)._passwordA,
-              m1: await (client as any)._computeCheck((client as any)._passwordHashAlgo, password)
-            })
-          })
-        );
-        log("SUCCESS", phoneNumber, "Password verified successfully");
-      } catch (passwordErr: any) {
-        log("WARN", phoneNumber, "SRP password check failed, trying simple password", {
-          errorMessage: passwordErr.message
+    // Always use client.start() for all authentication scenarios
+    // It handles code verification, password requirement detection, and 2FA
+    entry.authMethod = "start";
+    log("INFO", phoneNumber, "Using client.start() for authentication");
+    
+    await client.start({
+      phoneNumber: async () => {
+        log("INFO", phoneNumber, "phoneNumber callback invoked");
+        return phoneNumber;
+      },
+      phoneCode: async () => {
+        log("INFO", phoneNumber, "phoneCode callback invoked", { codeLength: code.length });
+        return code;
+      },
+      password: async () => {
+        log("INFO", phoneNumber, "password callback invoked");
+        if (!password) {
+          entry.isVerifyingPassword = true;
+          entry.phoneCodeVerified = true;
+          entry.phoneCode = code;
+          log("WARN", phoneNumber, "Password required but not provided - stopping here");
+          throw new Error("PASSWORD_REQUIRED");
+        }
+        log("INFO", phoneNumber, "password callback returning 2FA password");
+        return password;
+      },
+      onError: (err: any) => {
+        log("ERROR", phoneNumber, "client.start() error callback", {
+          errorMessage: err.message,
+          errorCode: err.code
         });
-        // If SRP fails, try the simple password approach
-        try {
-          await (client as any).invoke(
-            new Api.auth.CheckPassword({
-              password: new Api.InputCheckPasswordHash({
-                passwordHash: await (client as any)._computeNewPasswordHash(password, (client as any)._passwordHashAlgo)
-              })
-            })
-          );
-          log("SUCCESS", phoneNumber, "Simple password verification successful");
-        } catch (simpleErr: any) {
-          log("ERROR", phoneNumber, "Both password verification methods failed", {
-            srpError: passwordErr.message,
-            simpleError: simpleErr.message
-          });
-          throw new Error("PASSWORD_INVALID");
+        if (err.message && err.message.includes("PASSWORD")) {
+          entry.isVerifyingPassword = true;
+          entry.phoneCodeVerified = true;
+          entry.phoneCode = code;
+          throw new Error("PASSWORD_REQUIRED");
         }
+        throw err;
       }
-    } else {
-      // First call or no password provided yet - use client.start()
-      entry.authMethod = "start";
-      log("INFO", phoneNumber, "Using client.start() for authentication");
-      
-      await client.start({
-        phoneNumber: async () => {
-          log("INFO", phoneNumber, "phoneNumber callback invoked");
-          return phoneNumber;
-        },
-        phoneCode: async () => {
-          log("INFO", phoneNumber, "phoneCode callback invoked", { codeLength: code.length });
-          return code;
-        },
-        password: async () => {
-          log("INFO", phoneNumber, "password callback invoked");
-          if (!password) {
-            entry.isVerifyingPassword = true;
-            entry.phoneCodeVerified = true;
-            entry.phoneCode = code;
-            log("WARN", phoneNumber, "Password required but not provided - stopping here");
-            throw new Error("PASSWORD_REQUIRED");
-          }
-          log("INFO", phoneNumber, "password callback returning 2FA password");
-          return password;
-        },
-        onError: (err: any) => {
-          log("ERROR", phoneNumber, "client.start() error callback", {
-            errorMessage: err.message,
-            errorCode: err.code
-          });
-          if (err.message && err.message.includes("PASSWORD")) {
-            entry.isVerifyingPassword = true;
-            entry.phoneCodeVerified = true;
-            entry.phoneCode = code;
-            throw new Error("PASSWORD_REQUIRED");
-          }
-          throw err;
-        }
-      });
-      
-      log("SUCCESS", phoneNumber, "client.start() completed successfully");
-    }
+    });
+    
+    log("SUCCESS", phoneNumber, "client.start() completed successfully");
 
     const sessionString = (client.session as StringSession).save();
     log("INFO", phoneNumber, "Session string generated successfully", {
@@ -263,7 +222,7 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
 
     if (err.message === "PASSWORD_REQUIRED") {
       log("INFO", phoneNumber, "Password verification required, keeping client alive for next attempt");
-      // Keep the pending login entry for password retry - do NOT throw, re-throw the error
+      // Keep the pending login entry for password retry
       throw err;
     }
 
@@ -288,10 +247,20 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
       throw new Error("RATE_LIMITED");
     }
 
+    // Password failure - track attempts but DON'T disconnect or delete
     if (err.message === "INVALID_PASSWORD" || err.message.includes("PASSWORD_INVALID")) {
-      log("ERROR", phoneNumber, "Invalid password provided for 2FA");
-      await client.disconnect().catch(() => {});
-      pendingLogins.delete(phoneNumber);
+      entry.passwordFailureCount = (entry.passwordFailureCount || 0) + 1;
+      log("ERROR", phoneNumber, "Invalid password provided for 2FA", {
+        failureCount: entry.passwordFailureCount
+      });
+      
+      // Allow up to 3 password attempts before giving up
+      if (entry.passwordFailureCount >= 3) {
+        log("ERROR", phoneNumber, "Too many password failures, disconnecting");
+        await client.disconnect().catch(() => {});
+        pendingLogins.delete(phoneNumber);
+      }
+      
       throw new Error("INVALID_PASSWORD");
     }
 

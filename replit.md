@@ -10,6 +10,7 @@ Building a robust Telegram session management and message forwarding automation 
    - Website login (username/password) separate from Telegram login
    - Phone number-based Telegram authentication
    - Two-factor authentication (2FA) with password verification
+   - Multiple password retry attempts (up to 3) without losing session
    - Detailed logging with timestamps and error tracking
 
 2. **Session Management**
@@ -27,77 +28,66 @@ Building a robust Telegram session management and message forwarding automation 
 
 ### 🔧 Critical Fixes Applied (This Session)
 
-#### Fixed: Verification Code Resend Bug
+#### Fixed 1: Verification Code Resend Bug ✓
 - **Problem**: Code was being resent when entering 2FA password
-- **Root Cause**: `client.start()` was called twice - once for code verification and again for password verification
+- **Solution**: Simplified logic to always use `client.start()` which handles both code and password flows automatically
+
+#### Fixed 2: Session Loss on Wrong Password ✓
+- **Problem**: Session was deleted on first wrong password attempt, preventing retry with correct password
+- **Root Cause**: `pendingLogins.delete(phoneNumber)` was called immediately on INVALID_PASSWORD
 - **Solution**: 
-  - Track authentication state with `phoneCodeVerified` and `authMethod` flags
-  - When `authMethod === "start"` and password is provided, use direct CheckPassword API instead of calling `client.start()` again
-  - Preserve session client during password verification step
+  - Track password failures with `passwordFailureCount`
+  - Only delete session after 3 consecutive wrong password attempts
+  - Allow user to retry with correct password without re-sending code
 
-#### Fixed: authMethod Logic
-- **Changed condition** from `entry.authMethod !== "start"` to `entry.authMethod === "start"`
-- This ensures CheckPassword is only used after `start()` has successfully verified the code
+#### Fixed 3: Frontend Data Handling ✓
+- **Problem**: Password step wasn't sending the verification code
+- **Solution**: UI maintains code through all steps and sends it with password
 
-#### Fixed: Frontend Data Handling
-- **Problem**: Password step was not sending the verification code
-- **Solution**: Ensure code and phoneCodeHash are sent along with password in the second request
-- UI now properly maintains all data through multi-step authentication
+### 🏗️ Authentication Flow
 
-### 🏗️ Architecture
-
-**Authentication Flow:**
+**Complete Flow:**
 ```
-1. User enters phone → sendCode() creates client, sends verification code
-2. User enters code → signIn() with authMethod="start" calls client.start()
-3. If PASSWORD_REQUIRED → phoneCodeVerified=true, client kept alive
-4. User enters password → signIn() with authMethod="start" & password
-   → Uses CheckPassword API instead of start()
-5. Session string saved to database
+1. sendCode() → Creates client, sends verification code (5-min expiry)
+2. signIn(code) → client.start() verifies code
+3. PASSWORD_REQUIRED → phoneCodeVerified=true, client stays alive
+4. signIn(code + password) → client.start() with password
+5. On wrong password → failureCount++, keep session
+6. On 3rd failure → Delete session, force re-send code
+7. Success → Save sessionString to database
 ```
 
-**Key Components:**
-- `server/services/telegram.ts`: Core Telegram client logic and auth
-- `server/routes.ts`: API endpoints for login/session management
-- `client/src/pages/sessions.tsx`: Multi-step UI for authentication
-- `client/src/hooks/use-sessions.ts`: React hooks for API calls
+**Key State Tracking:**
+- `phoneCodeVerified`: Code was accepted, waiting for password
+- `passwordFailureCount`: Tracks wrong password attempts (0-3)
+- `authMethod`: Tracks authentication method (simple)
 
-### 📋 Data Models
+### 🔑 Components
 
-**Sessions Table:**
-- id, sessionName, phoneNumber, sessionString
-- isActive, createdAt, lastActive
+**Backend:**
+- `server/services/telegram.ts`: Telegram client and authentication logic
+- `server/routes.ts`: REST API endpoints
+- State: In-memory Map<phoneNumber, loginEntry>
 
-**Pending Logins (In-Memory):**
-- client, timestamp, phoneCodeHash
-- phoneCode, phoneCodeVerified, codeExpiryTime
-- authMethod (tracks "start" vs "password_retry")
-- attemptCount
+**Frontend:**
+- `client/src/pages/sessions.tsx`: Multi-step form (phone → code → password)
+- `client/src/hooks/use-sessions.ts`: React Query hooks
 
-### ⚠️ Known Issues & Considerations
-
-1. **FLOOD_WAIT Rate Limiting**
-   - Telegram enforces rate limits (e.g., 84260 second waits)
-   - Cannot bypass or retry during wait period
-   - Need test accounts with fresh rate limits
-
-2. **Password Verification Methods**
-   - Supports both SRP-based and simple hash-based password checks
-   - Falls back from SRP to simple method if needed
-
-3. **Session Persistence**
-   - Pending logins stored in-memory only (lost on server restart)
-   - Completed sessions saved to database
-   - Consider Redis for production multi-instance deployments
+**Database:**
+- `sessions` table: Stores completed session strings
+- `users` table: Website accounts (separate from Telegram sessions)
 
 ### 🎯 Next Steps
 
-1. Test complete 2FA flow end-to-end with valid credentials
+1. Test end-to-end 2FA flow with valid credentials
 2. Implement message forwarding logic
 3. Add task scheduling and monitoring
-4. Deploy with proper session persistence
+4. Consider Redis for pending login state in production
 
-### 💡 User Preferences
-- Arabic messages for all user-facing text
-- Robust error handling with clear feedback
-- Comprehensive logging for debugging auth issues
+### 💡 Design Decisions
+
+- **Single client.start() flow**: Simplifies code, avoids duplicate code sends
+- **In-memory pending logins**: Fast, but lost on server restart
+- **3-attempt password limit**: Balances security with UX
+- **Arabic-only messages**: User requirement for Arabic experience
+- **Separate auth flows**: Website login ≠ Telegram session auth
