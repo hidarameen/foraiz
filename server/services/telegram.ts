@@ -5,6 +5,7 @@ import { storage } from "../storage";
 const apiId = parseInt(process.env.TELEGRAM_API_ID || "0");
 const apiHash = process.env.TELEGRAM_API_HASH || "";
 
+// Map to store active clients for multi-session support
 const activeClients = new Map<number, TelegramClient>();
 
 export async function getTelegramClient(sessionId: number): Promise<TelegramClient | null> {
@@ -27,19 +28,25 @@ export async function getTelegramClient(sessionId: number): Promise<TelegramClie
   return client;
 }
 
-const pendingClients = new Map<string, { client: TelegramClient; timestamp: number }>();
+// Store pending login states
+const pendingLogins = new Map<string, { 
+  client: TelegramClient; 
+  timestamp: number;
+  phoneCodeHash?: string;
+  phoneCode?: string;
+  isVerifyingPassword?: boolean;
+}>();
 
 export async function sendCode(phoneNumber: string) {
-  if (pendingClients.has(phoneNumber)) {
-    const old = pendingClients.get(phoneNumber);
-    await old?.client.disconnect();
-    pendingClients.delete(phoneNumber);
+  const existing = pendingLogins.get(phoneNumber);
+  if (existing) {
+    await existing.client.disconnect().catch(() => {});
+    pendingLogins.delete(phoneNumber);
   }
 
   const client = new TelegramClient(new StringSession(""), apiId, apiHash, {
     connectionRetries: 5,
     useWSS: false,
-    testMode: false
   });
   
   await client.connect();
@@ -49,13 +56,17 @@ export async function sendCode(phoneNumber: string) {
     phoneNumber
   );
   
-  pendingClients.set(phoneNumber, { client, timestamp: Date.now() });
+  pendingLogins.set(phoneNumber, { 
+    client, 
+    timestamp: Date.now(),
+    phoneCodeHash: result.phoneCodeHash 
+  });
   
   setTimeout(async () => {
-    const entry = pendingClients.get(phoneNumber);
+    const entry = pendingLogins.get(phoneNumber);
     if (entry && Date.now() - entry.timestamp >= 15 * 60 * 1000) {
-      await entry.client.disconnect();
-      pendingClients.delete(phoneNumber);
+      await entry.client.disconnect().catch(() => {});
+      pendingLogins.delete(phoneNumber);
     }
   }, 15 * 60 * 1000);
 
@@ -63,37 +74,62 @@ export async function sendCode(phoneNumber: string) {
 }
 
 export async function signIn(phoneNumber: string, code: string, password?: string) {
-  const entry = pendingClients.get(phoneNumber);
+  const entry = pendingLogins.get(phoneNumber);
   if (!entry || !entry.client) {
     throw new Error("SESSION_EXPIRED_OR_NOT_FOUND");
   }
 
-  const client = entry.client;
+  const { client, phoneCodeHash } = entry;
 
   try {
-    await client.start({
-      phoneNumber: () => Promise.resolve(phoneNumber),
-      password: () => {
-        if (!password) return Promise.reject(new Error("PASSWORD_REQUIRED"));
-        return Promise.resolve(password);
-      },
-      phoneCode: () => Promise.resolve(code),
-      onError: (err) => {
-        if (err.message.includes("SESSION_PASSWORD_NEEDED") || err.message.includes("Password is empty") || err.message.includes("password is required")) {
-          throw new Error("PASSWORD_REQUIRED");
+    if (password && entry.isVerifyingPassword) {
+      // Step 2: 2FA Password
+      await (client as any).signIn({
+        phoneNumber,
+        password: async () => password,
+        onError: (err: any) => { throw err; }
+      });
+    } else {
+      // Step 1: Code
+      try {
+        await (client as any).signIn({
+          phoneNumber,
+          phoneCodeHash,
+          phoneCode: code,
+          password: async () => {
+            entry.isVerifyingPassword = true;
+            entry.phoneCode = code; // Save code for potential 2FA retry
+            throw new Error("PASSWORD_REQUIRED");
+          },
+          onError: (err: any) => {
+            if (err.message.includes("SESSION_PASSWORD_NEEDED")) {
+              entry.isVerifyingPassword = true;
+              entry.phoneCode = code;
+              throw new Error("PASSWORD_REQUIRED");
+            }
+            throw err;
+          }
+        });
+      } catch (err: any) {
+        if (err.message === "PASSWORD_REQUIRED") {
+          entry.isVerifyingPassword = true;
+          entry.phoneCode = code;
+          throw err;
         }
         throw err;
       }
-    });
+    }
 
     const sessionString = (client.session as StringSession).save();
-    await client.disconnect();
-    pendingClients.delete(phoneNumber);
+    await client.disconnect().catch(() => {});
+    pendingLogins.delete(phoneNumber);
     return sessionString;
   } catch (err: any) {
-    if (err.message === "PASSWORD_REQUIRED") throw err;
-    await client.disconnect();
-    pendingClients.delete(phoneNumber);
+    if (err.message === "PASSWORD_REQUIRED") {
+      throw err;
+    }
+    await client.disconnect().catch(() => {});
+    pendingLogins.delete(phoneNumber);
     throw err;
   }
 }
