@@ -141,7 +141,7 @@ export async function registerRoutes(
       activeTasks,
       totalForwarded,
       uptime: process.uptime(),
-      workerStatus: 'running' // Mock status for now
+      workerStatus: 'running'
     });
   });
 
