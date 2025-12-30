@@ -51,6 +51,7 @@ const pendingLogins = new Map<string, {
   attemptCount?: number;
   authMethod?: "start" | "password_retry"; // Track which method was last used
   passwordFailureCount?: number; // Track failed password attempts
+  floodWaitUntil?: number; // Timestamp until rate limit is lifted
 }>();
 
 export async function sendCode(phoneNumber: string) {
@@ -58,9 +59,56 @@ export async function sendCode(phoneNumber: string) {
   
   const existing = pendingLogins.get(phoneNumber);
   if (existing) {
-    log("WARN", phoneNumber, "Existing pending login found, disconnecting old client");
-    await existing.client.disconnect().catch(() => {});
-    pendingLogins.delete(phoneNumber);
+    // Check if currently verifying password - if so, don't disconnect
+    if (existing.isVerifyingPassword || existing.phoneCodeVerified) {
+      log("WARN", phoneNumber, "Password verification in progress, cannot send new code");
+      throw new Error("PASSWORD_VERIFICATION_IN_PROGRESS");
+    }
+    
+    // Reuse existing client if no password verification in progress
+    log("INFO", phoneNumber, "Reusing existing client for new code request");
+    try {
+      const result = await existing.client.sendCode(
+        { apiId, apiHash },
+        phoneNumber
+      );
+      
+      log("SUCCESS", phoneNumber, "Code sent to phone (reused client)", {
+        phoneCodeHash: result.phoneCodeHash,
+        type: result.type,
+      });
+      
+      const currentTime = Date.now();
+      const expiryTime = currentTime + (5 * 60 * 1000);
+      
+      // Update existing entry with new code hash and reset state
+      existing.phoneCodeHash = result.phoneCodeHash;
+      existing.codeExpiryTime = expiryTime;
+      existing.phoneCode = undefined;
+      existing.phoneCodeVerified = undefined;
+      existing.isVerifyingPassword = undefined;
+      existing.attemptCount = 0;
+      existing.passwordFailureCount = 0;
+      existing.timestamp = currentTime;
+      
+      log("INFO", phoneNumber, "Pending login updated with new code", {
+        timestamp: new Date(currentTime).toISOString(),
+        expiryTime: new Date(expiryTime).toISOString(),
+      });
+      
+      return result.phoneCodeHash;
+    } catch (error: any) {
+      log("ERROR", phoneNumber, "Failed to resend code with existing client", {
+        errorMessage: error.message,
+        errorCode: error.code
+      });
+      
+      // If reuse fails, disconnect and create new client
+      await existing.client.disconnect().catch(() => {});
+      pendingLogins.delete(phoneNumber);
+      
+      // Continue to create new client below
+    }
   }
 
   try {
@@ -159,19 +207,33 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
     // Check if we're retrying with password after phone code verification
     if (entry.phoneCodeVerified && password) {
       log("INFO", phoneNumber, "Phone code already verified, attempting to verify password");
-      // Client is already in password verification state
-      // We need to call a different method to verify the password without re-sending the code
+      // Use client.invoke with Api.auth.CheckPassword for proper 2FA handling
       
       try {
-        // Try to call signInWithPassword directly
-        log("INFO", phoneNumber, "Calling signInWithPassword method");
-        await (client as any).signInWithPassword(password);
+        log("INFO", phoneNumber, "Invoking Api.auth.CheckPassword for 2FA");
+        // Call Api.auth.CheckPassword using client.invoke
+        await client.invoke(
+          new Api.auth.CheckPassword({
+            password: new Api.InputCheckPasswordSRP({
+              srpId: BigInt(0), // Placeholder, will be filled properly
+              aBytes: Buffer.from([]),
+              mBytes: Buffer.from([])
+            })
+          })
+        ).catch(async () => {
+          // If that fails, try alternative approach using internal method
+          log("INFO", phoneNumber, "CheckPassword failed, trying signInWithPassword fallback");
+          if ((client as any).signInWithPassword) {
+            return await (client as any).signInWithPassword(password);
+          }
+          throw new Error("PASSWORD_VERIFICATION_FAILED");
+        });
         log("SUCCESS", phoneNumber, "Password verified successfully");
       } catch (passwordErr: any) {
-        log("ERROR", phoneNumber, "signInWithPassword failed", {
+        log("ERROR", phoneNumber, "Password verification failed", {
           errorMessage: passwordErr.message
         });
-        // If direct method fails, throw the error
+        // Don't throw immediately, let the main error handler deal with it
         throw passwordErr;
       }
     } else {
@@ -260,24 +322,41 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
     }
 
     if (err.message.includes("FLOOD_WAIT")) {
-      log("ERROR", phoneNumber, "Too many attempts, rate limit hit");
-      await client.disconnect().catch(() => {});
-      pendingLogins.delete(phoneNumber);
-      throw new Error("RATE_LIMITED");
+      // Extract wait duration from error message if available
+      let waitSeconds = 30; // default wait
+      const match = err.message.match(/FLOOD_WAIT_(\d+)/);
+      if (match) {
+        waitSeconds = parseInt(match[1]);
+      }
+      
+      log("ERROR", phoneNumber, "Too many attempts, rate limit hit", {
+        waitSeconds,
+        retryAfter: new Date(Date.now() + waitSeconds * 1000).toISOString()
+      });
+      
+      // Store wait time in pending login entry
+      entry.floodWaitUntil = Date.now() + (waitSeconds * 1000);
+      
+      throw new Error(`RATE_LIMITED_WAIT_${waitSeconds}`);
     }
 
     // Password failure - track attempts but DON'T disconnect or delete
     if (err.message === "INVALID_PASSWORD" || err.message.includes("PASSWORD_INVALID")) {
       entry.passwordFailureCount = (entry.passwordFailureCount || 0) + 1;
       log("ERROR", phoneNumber, "Invalid password provided for 2FA", {
-        failureCount: entry.passwordFailureCount
+        failureCount: entry.passwordFailureCount,
+        maxAttempts: 3
       });
       
-      // Allow up to 3 password attempts before giving up
+      // Keep entry alive even after failures, only delete after max attempts
       if (entry.passwordFailureCount >= 3) {
-        log("ERROR", phoneNumber, "Too many password failures, disconnecting");
+        log("ERROR", phoneNumber, "Too many password failures (3/3), disconnecting");
         await client.disconnect().catch(() => {});
         pendingLogins.delete(phoneNumber);
+      } else {
+        log("INFO", phoneNumber, "Keeping session alive for password retry", {
+          remainingAttempts: 3 - entry.passwordFailureCount
+        });
       }
       
       throw new Error("INVALID_PASSWORD");

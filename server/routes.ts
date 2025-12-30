@@ -97,6 +97,16 @@ export async function registerRoutes(
             errorMessage: err.message,
             errorCode: err.code
           });
+          
+          // Handle password verification in progress
+          if (err.message === "PASSWORD_VERIFICATION_IN_PROGRESS") {
+            logRequest("INFO", api.sessions.login.path, "Password verification in progress, cannot send new code");
+            return res.status(400).json({ 
+              message: "يرجى إكمال التحقق من كلمة المرور أولاً قبل طلب رمز جديد.",
+              errorCode: "PASSWORD_VERIFICATION_IN_PROGRESS"
+            });
+          }
+          
           return res.status(500).json({ 
             message: `فشل إرسال الرمز: ${err.message}`,
             errorCode: err.code 
@@ -174,11 +184,17 @@ export async function registerRoutes(
             });
           }
 
-          if (err.message === "RATE_LIMITED") {
-            logRequest("WARN", api.sessions.login.path, "Rate limit hit");
+          if (err.message.includes("RATE_LIMITED")) {
+            let waitSeconds = 30;
+            const match = err.message.match(/RATE_LIMITED_WAIT_(\d+)/);
+            if (match) {
+              waitSeconds = parseInt(match[1]);
+            }
+            logRequest("WARN", api.sessions.login.path, "Rate limit hit", { waitSeconds });
             return res.status(429).json({ 
-              message: "تم محاولة التسجيل عدة مرات. الرجاء الانتظار قبل المحاولة مجددا.",
-              errorCode: "RATE_LIMITED"
+              message: `تم محاولة التسجيل عدة مرات. الرجاء الانتظار ${waitSeconds} ثانية قبل المحاولة مجددا.`,
+              errorCode: "RATE_LIMITED",
+              waitSeconds
             });
           }
 
