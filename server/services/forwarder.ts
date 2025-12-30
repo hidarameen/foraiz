@@ -117,9 +117,14 @@ export class MessageForwarder {
 
       // Handle the case where content might be technically non-empty but contains characters
       // that gramJS/Telegram don't count as content when parseMode is HTML
-      const messageOptions: any = {
-        parseMode: "html"
-      };
+      const messageOptions: any = {};
+
+      // If we have original entities, use them instead of parseMode
+      if (metadata?.entities) {
+        messageOptions.formattingEntities = metadata.entities;
+      } else {
+        messageOptions.parseMode = "html";
+      }
 
       // If we have media, we should ideally use forwardMessages or send with media
       // but for now, we'll try to at least ensure the text is sent.
