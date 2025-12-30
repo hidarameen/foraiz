@@ -10,17 +10,18 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Edit2, Trash2, Play, Pause, ArrowLeft, Settings, Loader2 } from "lucide-react";
+import { Plus, Edit2, Trash2, Play, Pause, ArrowLeft, Settings, Loader2, Upload, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertTaskSchema } from "@shared/schema";
+import { insertTaskSchema, type Task } from "@shared/schema";
 import { z } from "zod";
 
 export default function TasksPage() {
   const { data: tasks, isLoading } = useTasks();
   const toggleTask = useToggleTask();
   const deleteTask = useDeleteTask();
+  const createTaskMutation = useCreateTask();
   const { toast } = useToast();
 
   const handleToggle = (id: number, currentStatus: boolean) => {
@@ -33,6 +34,49 @@ export default function TasksPage() {
     }
   };
 
+  const exportTask = (task: Task) => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(task, null, 2));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", `task_${task.id}_${task.name.replace(/\s+/g, '_')}.json`);
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+    toast({
+      title: "تم التصدير",
+      description: "تم تحميل ملف إعدادات المهمة بنجاح",
+    });
+  };
+
+  const importTask = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const importedTask = JSON.parse(e.target?.result as string);
+        // Remove IDs and timestamps to create as new
+        const { id, createdAt, status, errorMessage, ...taskToCreate } = importedTask;
+        
+        await createTaskMutation.mutateAsync(taskToCreate);
+        toast({
+          title: "تم الاستيراد",
+          description: "تم إنشاء مهمة جديدة من الملف المرفوع",
+        });
+      } catch (error) {
+        toast({
+          title: "فشل الاستيراد",
+          description: "تأكد من صحة تنسيق ملف المهمة",
+          variant: "destructive"
+        });
+      }
+    };
+    reader.readAsText(file);
+    // Reset input
+    event.target.value = "";
+  };
+
   if (isLoading) return <div className="flex items-center justify-center h-full py-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
 
   return (
@@ -42,11 +86,24 @@ export default function TasksPage() {
           <h1 className="text-3xl font-bold tracking-tight">بروتوكولات المهام</h1>
           <p className="text-muted-foreground">إدارة عمليات تحويل الرسائل التلقائية وفلاترها.</p>
         </div>
-        <TaskFormDialog />
+        <div className="flex gap-2">
+          <label className="cursor-pointer">
+            <input 
+              type="file" 
+              className="hidden" 
+              accept=".json"
+              onChange={importTask}
+            />
+            <Button variant="outline" className="gap-2 h-11 px-6 rounded-lg">
+              <Download className="w-4 h-4" /> استيراد مهمة
+            </Button>
+          </label>
+          <TaskFormDialog />
+        </div>
       </div>
 
       <div className="grid gap-6">
-        {tasks?.map((task, idx) => (
+        {tasks?.map((task) => (
           <Card key={task.id} className="hover-elevate transition-all border-s-4 border-s-primary">
             <CardContent className="py-6">
               <div className="flex flex-col md:flex-row items-center justify-between gap-6">
@@ -80,6 +137,15 @@ export default function TasksPage() {
                   />
 
                   <div className="flex items-center gap-2 pr-6 border-r">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="hover:bg-primary/10 hover:text-primary rounded-lg h-9 w-9"
+                      onClick={() => exportTask(task)}
+                      title="تصدير كملف منفصل"
+                    >
+                      <Upload className="w-4 h-4" />
+                    </Button>
                     <TaskFormDialog task={task} trigger={
                       <Button variant="ghost" size="icon" className="hover:bg-primary/10 hover:text-primary rounded-lg h-9 w-9">
                         <Edit2 className="w-4 h-4" />

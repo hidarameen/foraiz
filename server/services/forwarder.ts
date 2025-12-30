@@ -35,26 +35,56 @@ export class MessageForwarder {
       return [{
         messageId,
         success: false,
-        details: "Task is inactive",
+        details: `Task ${task.name} (ID: ${task.id}) is inactive`,
         timestamp: new Date(),
       }];
     }
 
+    console.log(`[Forwarder] Task "${task.name}" (ID: ${task.id}) processing message ${messageId}`);
+
     // معالجة كل وجهة
     for (const destination of task.destinationChannels) {
       try {
-        // هنا سيتم إضافة منطق التوجيه الفعلي مع Pyrogram
+        // التحقق من الفلاتر الخاصة بالمهمة
+        const filters = task.filters as any;
+        if (content && !this.applyFilters(content, filters)) {
+          console.log(`[Forwarder] Message ${messageId} skipped by filters for task "${task.name}"`);
+          
+          await storage.createLog({
+            taskId: task.id,
+            sourceChannel: metadata?.fromChatId?.toString() || task.sourceChannels[0],
+            destinationChannel: destination,
+            messageId,
+            status: "skipped",
+            details: "Filtered by keywords",
+          });
+
+          continue;
+        }
+
+        // تطبيق التنسيقات والخيارات الخاصة بالمهمة
+        let finalContent = content;
+        const options = task.options as any;
+
+        if (options?.addSignature) {
+          finalContent = this.addSignature(finalContent, options.addSignature);
+        }
+
         const result = await this.sendToDestination(
           task.sessionId,
           destination,
-          content,
-          metadata
+          finalContent,
+          {
+            ...metadata,
+            taskId: task.id,
+            taskName: task.name
+          }
         );
 
         // تسجيل السجل
         await storage.createLog({
           taskId: task.id,
-          sourceChannel: task.sourceChannels[0],
+          sourceChannel: metadata?.fromChatId?.toString() || task.sourceChannels[0],
           destinationChannel: destination,
           messageId,
           status: result.success ? "success" : "failed",
@@ -67,7 +97,7 @@ export class MessageForwarder {
         
         await storage.createLog({
           taskId: task.id,
-          sourceChannel: task.sourceChannels[0],
+          sourceChannel: metadata?.fromChatId?.toString() || task.sourceChannels[0],
           destinationChannel: destination,
           messageId,
           status: "failed",
