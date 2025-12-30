@@ -44,16 +44,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider style={style as React.CSSProperties}>
-      <div className="flex h-screen w-full bg-background overflow-hidden">
-        <Sidebar collapsible="icon" className="border-e bg-sidebar dark:bg-sidebar">
-          <SidebarHeader className="p-4 bg-sidebar dark:bg-sidebar">
-            <div className="flex items-center gap-3 px-2">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <Terminal className="text-primary-foreground w-5 h-5" />
-              </div>
+      <div className="flex h-screen w-full bg-background overflow-hidden" dir="rtl">
+        <Sidebar collapsible="icon" side="right" className="border-s bg-sidebar dark:bg-sidebar">
+          <SidebarHeader className="p-4 bg-sidebar dark:bg-sidebar text-right">
+            <div className="flex items-center justify-end gap-3 px-2">
               <span className="font-bold text-xl tracking-tight truncate group-data-[collapsible=icon]:hidden text-sidebar-foreground">
                 نظام التحكم
               </span>
+              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+                <Terminal className="text-primary-foreground w-5 h-5" />
+              </div>
             </div>
           </SidebarHeader>
           
@@ -65,11 +65,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     asChild
                     isActive={location === item.href}
                     tooltip={item.label}
-                    className="h-11 px-4 rounded-lg transition-all data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                    className="h-11 px-4 rounded-lg transition-all data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground flex-row-reverse text-right"
                   >
-                    <Link href={item.href}>
+                    <Link href={item.href} className="flex flex-row-reverse items-center gap-3 w-full">
                       <item.icon className="w-5 h-5" />
-                      <span className="font-medium text-base">{item.label}</span>
+                      <span className="font-medium text-base flex-1">{item.label}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -79,7 +79,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
           <SidebarFooter className="p-4 border-t bg-sidebar dark:bg-sidebar">
             <div className="flex flex-col gap-4">
-              <div className="flex items-center gap-3 px-2 group-data-[collapsible=icon]:px-0 text-sidebar-foreground">
+              <div className="flex items-center flex-row-reverse gap-3 px-2 group-data-[collapsible=icon]:px-0 text-sidebar-foreground text-right">
                 <Avatar className="w-8 h-8 border">
                   <AvatarFallback className="bg-primary/10 text-primary text-xs">
                     {user?.username?.[0]?.toUpperCase()}
@@ -91,7 +91,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </div>
               </div>
               
-              <div className="flex items-center gap-2 group-data-[collapsible=icon]:flex-col">
+              <div className="flex items-center justify-center gap-2 group-data-[collapsible=icon]:flex-col">
                 <Button
                   variant="ghost"
                   size="icon"
@@ -115,18 +115,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </SidebarFooter>
         </Sidebar>
 
-        <main className="flex-1 flex flex-col min-w-0 relative">
-          <header className="h-16 border-b flex items-center justify-between px-6 bg-background/80 backdrop-blur-md sticky top-0 z-30">
-            <div className="flex items-center gap-4">
+        <main className="flex-1 flex flex-col min-w-0 relative overflow-hidden">
+          <header className="h-16 border-b flex flex-row-reverse items-center justify-between px-6 bg-background/80 backdrop-blur-md sticky top-0 z-30">
+            <div className="flex flex-row-reverse items-center gap-4">
               <SidebarTrigger className="h-9 w-9" />
               <div className="h-4 w-[1px] bg-border mx-2 hidden md:block" />
-              <h2 className="text-sm font-medium text-muted-foreground hidden md:block">
+              <h2 className="text-sm font-medium text-muted-foreground hidden md:block text-right">
                 {navItems.find(i => i.href === location)?.label || "الصفحة الرئيسية"}
               </h2>
             </div>
           </header>
-          <div className="flex-1 overflow-auto p-6 lg:p-8">
-            <div className="max-w-7xl mx-auto space-y-8">
+          <div className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
+            <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
               {children}
             </div>
           </div>

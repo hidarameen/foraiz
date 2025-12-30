@@ -52,7 +52,7 @@ export default function LoginPage() {
       });
 
       if (isLogin) {
-        setLocation("/");
+        window.location.href = "/";
       } else {
         setIsLogin(true);
         setPassword("");
