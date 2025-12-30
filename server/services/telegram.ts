@@ -219,12 +219,18 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
   });
 
   try {
+    // If we've already verified the phone code and need a password
+    if (entry.phoneCodeVerified && !password) {
+      log("WARN", phoneNumber, "Password required - stopping here");
+      throw new Error("PASSWORD_REQUIRED");
+    }
+
     // If we've already verified the phone code and have a password, 
     // we should NOT call client.start() again because it re-submits the code.
     // Instead, we use the client that is already waiting at the password step.
     if (entry.phoneCodeVerified && password) {
       log("INFO", phoneNumber, "Processing password for existing session");
-      // Use CheckPassword for 2FA instead of client.start() again
+      // Use signin for 2FA instead of client.start() again
       await client.signin({
         password: password
       });
