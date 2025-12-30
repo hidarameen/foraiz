@@ -54,6 +54,16 @@ const pendingLogins = new Map<string, {
   floodWaitUntil?: number; // Timestamp until rate limit is lifted
 }>();
 
+// Helper function to clean up a login session
+async function cleanupLoginSession(phoneNumber: string) {
+  const entry = pendingLogins.get(phoneNumber);
+  if (entry) {
+    await entry.client.disconnect().catch(() => {});
+    pendingLogins.delete(phoneNumber);
+    log("INFO", phoneNumber, "Login session cleaned up");
+  }
+}
+
 export async function sendCode(phoneNumber: string) {
   log("INFO", phoneNumber, "Starting sendCode request");
   
@@ -196,8 +206,7 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
       expiryTime: new Date(entry.codeExpiryTime).toISOString(),
       currentTime: new Date().toISOString()
     });
-    await entry.client.disconnect().catch(() => {});
-    pendingLogins.delete(phoneNumber);
+    await cleanupLoginSession(phoneNumber);
     throw new Error("CODE_EXPIRED");
   }
 
@@ -246,13 +255,6 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
           errorMessage: err.message,
           errorCode: err.code
         });
-        // Check for password requirement
-        if (err.message && err.message.includes("PASSWORD")) {
-          entry.isVerifyingPassword = true;
-          entry.phoneCodeVerified = true;
-          entry.phoneCode = code;
-          throw new Error("PASSWORD_REQUIRED");
-        }
         throw err;
       }
     });
@@ -265,11 +267,8 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
     });
 
     // After successful sign in, disconnect the temp client
-    await client.disconnect().catch(() => {});
-    log("INFO", phoneNumber, "Temporary client disconnected");
-    
-    pendingLogins.delete(phoneNumber);
-    log("SUCCESS", phoneNumber, "Pending login entry removed, authentication complete");
+    await cleanupLoginSession(phoneNumber);
+    log("SUCCESS", phoneNumber, "Authentication complete");
     
     return sessionString;
   } catch (err: any) {
@@ -288,15 +287,13 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
 
     if (err.message.includes("PHONE_CODE_INVALID") || err.message === "INVALID_CODE") {
       log("ERROR", phoneNumber, "Invalid phone code provided");
-      await client.disconnect().catch(() => {});
-      pendingLogins.delete(phoneNumber);
+      await cleanupLoginSession(phoneNumber);
       throw new Error("INVALID_CODE");
     }
 
     if (err.message.includes("PHONE_CODE_EXPIRED")) {
       log("ERROR", phoneNumber, "Phone code has expired");
-      await client.disconnect().catch(() => {});
-      pendingLogins.delete(phoneNumber);
+      await cleanupLoginSession(phoneNumber);
       throw new Error("CODE_EXPIRED");
     }
 
@@ -330,8 +327,7 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
       // Keep entry alive even after failures, only delete after max attempts
       if (entry.passwordFailureCount >= 3) {
         log("ERROR", phoneNumber, "Too many password failures (3/3), disconnecting");
-        await client.disconnect().catch(() => {});
-        pendingLogins.delete(phoneNumber);
+        await cleanupLoginSession(phoneNumber);
       } else {
         log("INFO", phoneNumber, "Keeping session alive for password retry", {
           remainingAttempts: 3 - entry.passwordFailureCount
@@ -343,8 +339,7 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
 
     // For any other error, disconnect and clean up
     log("ERROR", phoneNumber, "Unknown error during sign in", { error: err.message });
-    await client.disconnect().catch(() => {});
-    pendingLogins.delete(phoneNumber);
+    await cleanupLoginSession(phoneNumber);
     throw err;
   }
 }
