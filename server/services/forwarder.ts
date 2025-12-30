@@ -88,7 +88,6 @@ export class MessageForwarder {
 
   /**
    * إرسال رسالة إلى وجهة واحدة
-   * سيتم تنفيذه مع Pyrogram لاحقاً
    */
   private async sendToDestination(
     sessionId: number,
@@ -96,15 +95,40 @@ export class MessageForwarder {
     content: string,
     metadata?: Record<string, any>
   ): Promise<ForwardingResult> {
-    // هنا سيتم التكامل مع Pyrogram
-    // للآن نعود mock result
-    
-    return {
-      messageId: `${Date.now()}`,
-      success: true,
-      details: "Message forwarded successfully",
-      timestamp: new Date(),
-    };
+    try {
+      const { getTelegramClient } = await import("./telegram");
+      const client = await getTelegramClient(sessionId);
+      
+      if (!client) {
+        throw new Error("No active client for session");
+      }
+
+      // Send message to destination
+      const entity = await client.getEntity(destination);
+      const result = await client.sendMessage(entity, {
+        message: content,
+        parseMode: "html"
+      });
+      
+      console.log(`[Forwarder] Message sent to ${destination}:`, result.id);
+      
+      return {
+        messageId: result.id?.toString() || `${Date.now()}`,
+        success: true,
+        details: "Message forwarded successfully",
+        timestamp: new Date(),
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      console.error(`[Forwarder] Failed to send to ${destination}:`, errorMsg);
+      
+      return {
+        messageId: metadata?.originalMessageId?.toString() || `${Date.now()}`,
+        success: false,
+        details: errorMsg,
+        timestamp: new Date(),
+      };
+    }
   }
 
   /**

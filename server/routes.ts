@@ -5,7 +5,7 @@ import { api, errorSchemas } from "@shared/routes";
 import { z } from "zod";
 import { telegramLoginSchema } from "@shared/schema";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
-import { sendCode, signIn } from "./services/telegram";
+import { sendCode, signIn, startAllMessageListeners } from "./services/telegram";
 
 // Detailed logging utility for routes
 function logRequest(level: string, route: string, message: string, data?: any) {
@@ -26,7 +26,13 @@ export async function registerRoutes(
   await setupAuth(app);
   registerAuthRoutes(app);
 
-  // 2. Application Routes
+  // 2. Start Message Listeners for all active sessions
+  console.log("[Routes] Initializing message listeners...");
+  await startAllMessageListeners().catch(err => 
+    console.error("[Routes] Failed to start message listeners:", err)
+  );
+
+  // 3. Application Routes
 
   // === SESSIONS ===
   app.get(api.sessions.list.path, async (req, res) => {
@@ -399,6 +405,148 @@ export async function registerRoutes(
       uptime: process.uptime(),
       workerStatus: 'running'
     });
+  });
+
+  // === TEST ENDPOINTS ===
+  // Test message listener
+  app.post('/api/test/simulate-message', async (req, res) => {
+    try {
+      const { taskId, messageText, chatId } = req.body;
+      
+      logRequest("INFO", "/api/test/simulate-message", "Simulating message", {
+        taskId,
+        messageText: messageText?.substring(0, 50),
+        chatId
+      });
+
+      const task = await storage.getTask(taskId);
+      if (!task) {
+        return res.status(404).json({ message: 'Task not found' });
+      }
+
+      const { forwarder } = await import('./services/forwarder');
+      const results = await forwarder.forwardMessage(
+        task,
+        `sim_${Date.now()}`,
+        messageText || "رسالة اختبار",
+        { simulatedMessage: true }
+      );
+
+      logRequest("SUCCESS", "/api/test/simulate-message", "Message simulated successfully", { results });
+      res.json({ success: true, results });
+    } catch (err) {
+      logRequest("ERROR", "/api/test/simulate-message", (err as Error).message);
+      res.status(500).json({ message: (err as Error).message });
+    }
+  });
+
+  // Check Telegram connection
+  app.get('/api/test/telegram-status', async (req, res) => {
+    try {
+      const { getTelegramClient } = await import('./services/telegram');
+      const sessions = await storage.getSessions();
+      
+      const statusData = await Promise.all(
+        sessions.map(async (session) => {
+          try {
+            const client = await getTelegramClient(session.id);
+            const isConnected = client ? true : false;
+            
+            if (isConnected && client) {
+              try {
+                const me = await client.getMe();
+                return {
+                  sessionId: session.id,
+                  phoneNumber: session.phoneNumber,
+                  isActive: session.isActive,
+                  connected: true,
+                  userId: me?.id,
+                  username: me?.username
+                };
+              } catch (e) {
+                return {
+                  sessionId: session.id,
+                  phoneNumber: session.phoneNumber,
+                  isActive: session.isActive,
+                  connected: true,
+                  error: 'Failed to get user info'
+                };
+              }
+            }
+            
+            return {
+              sessionId: session.id,
+              phoneNumber: session.phoneNumber,
+              isActive: session.isActive,
+              connected: false
+            };
+          } catch (e) {
+            return {
+              sessionId: session.id,
+              phoneNumber: session.phoneNumber,
+              isActive: session.isActive,
+              connected: false,
+              error: (e as Error).message
+            };
+          }
+        })
+      );
+
+      logRequest("SUCCESS", "/api/test/telegram-status", "Telegram status retrieved", { statusData });
+      res.json({ status: 'ok', sessions: statusData });
+    } catch (err) {
+      logRequest("ERROR", "/api/test/telegram-status", (err as Error).message);
+      res.status(500).json({ message: (err as Error).message });
+    }
+  });
+
+  // Get channel entities
+  app.post('/api/test/get-entity', async (req, res) => {
+    try {
+      const { sessionId, entity } = req.body;
+      
+      if (!sessionId || !entity) {
+        return res.status(400).json({ message: 'sessionId and entity are required' });
+      }
+
+      const { getTelegramClient } = await import('./services/telegram');
+      const client = await getTelegramClient(sessionId);
+      
+      if (!client) {
+        return res.status(404).json({ message: 'Client not found for session' });
+      }
+
+      logRequest("INFO", "/api/test/get-entity", "Resolving entity", { sessionId, entity });
+
+      try {
+        const resolvedEntity = await client.getEntity(entity);
+        
+        logRequest("SUCCESS", "/api/test/get-entity", "Entity resolved", {
+          inputId: entity,
+          entityId: resolvedEntity?.id,
+          entityTitle: (resolvedEntity as any)?.title || (resolvedEntity as any)?.username
+        });
+
+        res.json({
+          success: true,
+          entity: {
+            id: resolvedEntity?.id?.toString(),
+            title: (resolvedEntity as any)?.title,
+            username: (resolvedEntity as any)?.username,
+            type: (resolvedEntity as any)?.isUser ? 'user' : (resolvedEntity as any)?.isSupergroup ? 'supergroup' : 'unknown'
+          }
+        });
+      } catch (err) {
+        logRequest("WARN", "/api/test/get-entity", "Entity resolution failed", { error: (err as Error).message });
+        res.json({
+          success: false,
+          message: `Failed to resolve entity: ${(err as Error).message}`
+        });
+      }
+    } catch (err) {
+      logRequest("ERROR", "/api/test/get-entity", (err as Error).message);
+      res.status(500).json({ message: (err as Error).message });
+    }
   });
 
   return httpServer;
