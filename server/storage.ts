@@ -80,16 +80,16 @@ export class DatabaseStorage implements IStorage {
 
   async createTask(insertTask: InsertTask): Promise<Task> {
     const [task] = await db.insert(tasks).values(insertTask).returning();
-    return task;
+    return task as Task;
   }
 
   async updateTask(id: number, updates: Partial<InsertTask>): Promise<Task> {
     const [task] = await db
       .update(tasks)
-      .set(updates)
+      .set(updates as any)
       .where(eq(tasks.id, id))
       .returning();
-    return task;
+    return task as Task;
   }
 
   async deleteTask(id: number): Promise<void> {

@@ -55,13 +55,13 @@ export async function signIn(phoneNumber: string, phoneCodeHash: string, code: s
       phoneCodeHash,
       phoneCode: code,
       password: async () => password || "",
-      onError: (err) => {
+      onError: (err: any) => {
         if (err.message.includes("SESSION_PASSWORD_NEEDED") && !password) {
           throw new Error("PASSWORD_REQUIRED");
         }
         throw err;
       },
-    });
+    } as any);
 
     const sessionString = (client.session as StringSession).save();
     return sessionString;
