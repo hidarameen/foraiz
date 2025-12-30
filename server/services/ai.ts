@@ -1,3 +1,8 @@
+import { OpenAIProvider } from './ai-providers/openai';
+import { AnthropicProvider } from './ai-providers/anthropic';
+import { GroqProvider } from './ai-providers/groq';
+import { GeminiProvider } from './ai-providers/gemini';
+import { HuggingFaceProvider } from './ai-providers/huggingface';
 
 export interface AIModel {
   id: string;
@@ -52,16 +57,19 @@ export const AI_CONFIG = {
 
 export class AIService {
   static async chat(provider: AIProvider, model: string, prompt: string, apiKey: string) {
-    // Implementation for each provider would go here
-    // For now, this is a placeholder for the multi-provider logic
-    console.log(`Calling ${provider} with model ${model} and prompt: ${prompt}`);
-    
-    // In a real implementation, we would use fetch or specific SDKs
-    // Since this is a fast mode request, we are setting up the structure
-    return {
-      message: `Response from ${provider} (${model}): "Processed your request: ${prompt}"`,
-      provider,
-      model
-    };
+    switch (provider) {
+      case 'openai':
+        return OpenAIProvider.chat(model, prompt, apiKey);
+      case 'anthropic':
+        return AnthropicProvider.chat(model, prompt, apiKey);
+      case 'groq':
+        return GroqProvider.chat(model, prompt, apiKey);
+      case 'gemini':
+        return GeminiProvider.chat(model, prompt, apiKey);
+      case 'huggingface':
+        return HuggingFaceProvider.chat(model, prompt, apiKey);
+      default:
+        throw new Error(`Provider ${provider} not supported`);
+    }
   }
 }
