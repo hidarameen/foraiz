@@ -84,37 +84,22 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
   try {
     if (password && entry.isVerifyingPassword) {
       // Step 2: 2FA Password
-      await (client as any).signIn({
-        phoneNumber,
-        password: async () => password,
-        onError: (err: any) => { throw err; }
-      });
+      await client.invoke(new Api.auth.CheckPassword({
+        password: await (client as any)._createSrpHash(await client.invoke(new Api.account.GetPassword()), password)
+      } as any));
     } else {
       // Step 1: Code
       try {
-        await (client as any).signIn({
+        await client.invoke(new Api.auth.SignIn({
           phoneNumber,
           phoneCodeHash,
           phoneCode: code,
-          password: async () => {
-            entry.isVerifyingPassword = true;
-            entry.phoneCode = code; // Save code for potential 2FA retry
-            throw new Error("PASSWORD_REQUIRED");
-          },
-          onError: (err: any) => {
-            if (err.message.includes("SESSION_PASSWORD_NEEDED")) {
-              entry.isVerifyingPassword = true;
-              entry.phoneCode = code;
-              throw new Error("PASSWORD_REQUIRED");
-            }
-            throw err;
-          }
-        });
+        }));
       } catch (err: any) {
-        if (err.message === "PASSWORD_REQUIRED") {
+        if (err.message.includes("SESSION_PASSWORD_NEEDED")) {
           entry.isVerifyingPassword = true;
           entry.phoneCode = code;
-          throw err;
+          throw new Error("PASSWORD_REQUIRED");
         }
         throw err;
       }
