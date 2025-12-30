@@ -52,6 +52,7 @@ const pendingLogins = new Map<string, {
   authMethod?: "start" | "password_retry"; // Track which method was last used
   passwordFailureCount?: number; // Track failed password attempts
   floodWaitUntil?: number; // Timestamp until rate limit is lifted
+  passwordCallbackCount?: number; // Track password callback invocations to prevent infinite loop
 }>();
 
 // Helper function to clean up a login session
@@ -236,6 +237,7 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
       });
     } else {
       entry.authMethod = "start";
+      entry.passwordCallbackCount = 0;
       log("INFO", phoneNumber, "Starting fresh authentication with client.start()");
       await client.start({
         phoneNumber: async () => {
@@ -247,13 +249,20 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
           return code;
         },
         password: async () => {
-          log("INFO", phoneNumber, "password callback invoked", { hasPassword: !!password });
+          entry.passwordCallbackCount = (entry.passwordCallbackCount || 0) + 1;
+          log("INFO", phoneNumber, "password callback invoked", { 
+            hasPassword: !!password,
+            callCount: entry.passwordCallbackCount 
+          });
+          
           if (!password) {
             // Mark that we're now at password verification stage
             entry.isVerifyingPassword = true;
             entry.phoneCodeVerified = true;
             entry.phoneCode = code;
-            log("WARN", phoneNumber, "Password required - stopping here");
+            log("WARN", phoneNumber, "Password required - stopping here (invocation #" + entry.passwordCallbackCount + ")");
+            
+            // On first invocation without password, throw to break out of the loop
             throw new Error("PASSWORD_REQUIRED");
           }
           log("INFO", phoneNumber, "password callback returning 2FA password");
@@ -261,7 +270,10 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
         },
         onError: (err: any) => {
           // Handle common errors gracefully within start()
-          if (err.message === "PASSWORD_REQUIRED") return;
+          if (err.message === "PASSWORD_REQUIRED") {
+            log("WARN", phoneNumber, "Breaking out of client.start() due to PASSWORD_REQUIRED");
+            return;
+          }
           
           log("ERROR", phoneNumber, "client.start() error callback", {
             errorMessage: err.message,
