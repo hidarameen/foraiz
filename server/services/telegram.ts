@@ -390,83 +390,56 @@ export async function startMessageListener(sessionId: number) {
     // Listen for new messages using the proper event handler
     client.addEventHandler(async (event: any) => {
       try {
-        // Log all events for debugging
-        if (event.message || event.update) {
-          console.log(`[Listener] 📨 Event received:`, {
-            hasMessage: !!event.message,
-            chatId: event.chatId?.toString(),
-            peerId: event.message?.peerId?.toString(),
-            messageId: event.message?.id,
-            text: event.message?.text?.substring(0, 30),
-            timestamp: new Date().toISOString()
-          });
+        // Check if this is a new message event
+        if (event.message) {
+          const message = event.message;
+          
+          // Try multiple ways to get the chat ID
+          const chatId = event.chatId?.toString() || 
+                        message.peerId?.channelId?.toString() ||
+                        message.peerId?.userId?.toString() ||
+                        message.peerId?.toString();
+          
+          // Get active tasks
+          const tasks = await storage.getTasks();
+          const sessionTasks = tasks.filter(t => t.sessionId === sessionId && t.isActive);
+          
+          if (sessionTasks.length === 0) return;
 
-          // Check if this is a new message event
-          if (event.message) {
-            const message = event.message;
-            
-            // Try multiple ways to get the chat ID
-            const chatId = event.chatId?.toString() || 
-                          message.peerId?.channelId?.toString() ||
-                          message.peerId?.userId?.toString() ||
-                          message.peerId?.toString();
-            
-            console.log(`[Listener] 📥 Processing message in chat ${chatId}`, {
-              messageId: message.id,
-              text: message.text?.substring(0, 50),
-              peerId: message.peerId,
-              chatId: chatId
+          // Standardize chatId for comparison
+          const cleanChatId = chatId.replace(/^-100/, "");
+
+          // Check each task
+          for (const task of sessionTasks) {
+            const matchesChannel = task.sourceChannels.some(sourceId => {
+              const cleanSourceId = sourceId.replace(/^-100/, "");
+              return cleanSourceId === cleanChatId;
             });
 
-            // Get active tasks
-            const tasks = await storage.getTasks();
-            console.log(`[Listener] 📋 Found ${tasks.length} total tasks, checking for session ${sessionId}`);
-            
-            const sessionTasks = tasks.filter(t => t.sessionId === sessionId);
-            console.log(`[Listener] 🎯 Found ${sessionTasks.length} tasks for this session`);
+            if (!matchesChannel) {
+              continue;
+            }
 
-            // Check each task
-            for (const task of sessionTasks) {
-              console.log(`[Listener] 🔍 Checking task ${task.id}:`, {
-                taskName: task.name,
-                isActive: task.isActive,
-                sourceChannels: task.sourceChannels,
-                matchesChatId: task.sourceChannels.includes(chatId)
-              });
+            console.log(`[Listener] ✅ Task ${task.id} matched! Processing message from ${chatId}`);
 
-              if (!task.isActive) {
-                console.log(`[Listener] ⏸️ Task ${task.id} is not active`);
-                continue;
-              }
+            // Check filters
+            const messageText = message.text || "";
+            if (!forwarder.applyFilters(messageText, task.filters)) {
+              continue;
+            }
 
-              if (!task.sourceChannels.includes(chatId)) {
-                console.log(`[Listener] ❌ Task ${task.id} source channels don't match ${chatId}`);
-                console.log(`[Listener] 📌 Task sources:`, task.sourceChannels);
-                continue;
-              }
-
-              console.log(`[Listener] ✅ Task ${task.id} matched! Processing...`);
-
-              // Check filters
-              const messageText = message.text || "";
-              if (!forwarder.applyFilters(messageText, task.filters)) {
-                console.log(`[Forwarder] 🚫 Message filtered out by task ${task.id}`);
-                continue;
-              }
-
-              // Forward message to destinations
-              try {
-                console.log(`[Forwarder] 🚀 Forwarding message via task ${task.id} to:`, task.destinationChannels);
-                await forwarder.forwardMessage(
-                  task,
-                  message.id?.toString() || `msg_${Date.now()}`,
-                  messageText,
-                  { originalMessageId: message.id }
-                );
-                console.log(`[Forwarder] ✅ Message forwarded via task ${task.id}`);
-              } catch (err) {
-                console.error(`[Forwarder] ❌ Error forwarding message via task ${task.id}:`, err);
-              }
+            // Forward message to destinations
+            try {
+              console.log(`[Forwarder] 🚀 Forwarding message via task ${task.id} to:`, task.destinationChannels);
+              await forwarder.forwardMessage(
+                task,
+                message.id?.toString() || `msg_${Date.now()}`,
+                messageText,
+                { originalMessageId: message.id }
+              );
+              console.log(`[Forwarder] ✅ Message forwarded via task ${task.id}`);
+            } catch (err) {
+              console.error(`[Forwarder] ❌ Error forwarding message via task ${task.id}:`, err);
             }
           }
         }
