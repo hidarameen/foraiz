@@ -1,84 +1,137 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Radio, ListChecks, History, LogOut } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { motion } from "framer-motion";
+import { 
+  LayoutDashboard, 
+  Terminal, 
+  Activity, 
+  ScrollText, 
+  LogOut,
+  Moon,
+  Sun,
+  Menu
+} from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { Button } from "@/components/ui/button";
+import { useTheme } from "@/components/theme-provider";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+  SidebarFooter,
+} from "@/components/ui/sidebar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+
+const navItems = [
+  { icon: LayoutDashboard, label: "لوحة التحكم", href: "/" },
+  { icon: Activity, label: "الجلسات", href: "/sessions" },
+  { icon: Terminal, label: "المهام", href: "/tasks" },
+  { icon: ScrollText, label: "السجلات", href: "/logs" },
+];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logoutMutation } = useAuth();
+  const { theme, setTheme } = useTheme();
 
-  const navItems = [
-    { href: "/", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/tasks", label: "Tasks", icon: ListChecks },
-    { href: "/sessions", label: "Sessions", icon: Radio },
-    { href: "/logs", label: "Logs", icon: History },
-  ];
+  const style = {
+    "--sidebar-width": "18rem",
+    "--sidebar-width-icon": "4rem",
+  };
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row font-body overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-full md:w-64 border-b md:border-b-0 md:border-r border-white/10 bg-black/40 backdrop-blur-xl md:h-screen sticky top-0 z-50 flex-shrink-0">
-        <div className="p-6">
-          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary font-display tracking-widest">
-            NEURO<span className="text-white">BOT</span>
-          </h1>
-          <p className="text-xs text-muted-foreground font-mono mt-1 tracking-widest">SYSTEM ONLINE</p>
-        </div>
-
-        <nav className="px-4 space-y-2 mt-4">
-          {navItems.map((item) => {
-            const isActive = location === item.href;
-            const Icon = item.icon;
-            
-            return (
-              <Link key={item.href} href={item.href} className={cn(
-                "flex items-center gap-3 px-4 py-3 rounded-md transition-all duration-200 group relative overflow-hidden",
-                isActive 
-                  ? "text-primary bg-primary/10 border border-primary/30 shadow-[0_0_15px_rgba(0,255,255,0.1)]" 
-                  : "text-muted-foreground hover:text-foreground hover:bg-white/5"
-              )}>
-                {isActive && (
-                  <motion.div 
-                    layoutId="activeNav"
-                    className="absolute inset-0 bg-gradient-to-r from-primary/20 to-transparent"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                  />
-                )}
-                <Icon className={cn("w-5 h-5 relative z-10", isActive && "text-primary drop-shadow-[0_0_8px_rgba(0,255,255,0.5)]")} />
-                <span className="font-medium tracking-wide relative z-10 font-mono text-sm">{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="absolute bottom-0 w-full p-4 border-t border-white/10 bg-black/20">
-          <div className="flex items-center gap-3 mb-4 px-2">
-            <div className="w-8 h-8 rounded bg-gradient-to-br from-primary to-secondary flex items-center justify-center font-bold text-black font-display">
-              {user?.username?.charAt(0).toUpperCase() || "U"}
+    <SidebarProvider style={style as React.CSSProperties}>
+      <div className="flex h-screen w-full bg-background overflow-hidden">
+        <Sidebar collapsible="icon" className="border-e">
+          <SidebarHeader className="p-4">
+            <div className="flex items-center gap-3 px-2">
+              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+                <Terminal className="text-primary-foreground w-5 h-5" />
+              </div>
+              <span className="font-bold text-xl tracking-tight truncate group-data-[collapsible=icon]:hidden">
+                نظام التحكم
+              </span>
             </div>
-            <div className="overflow-hidden">
-              <div className="text-sm font-bold truncate text-white font-mono">{user?.username}</div>
-              <div className="text-xs text-primary/70">Operator</div>
+          </SidebarHeader>
+          
+          <SidebarContent className="px-2">
+            <SidebarMenu>
+              {navItems.map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={location === item.href}
+                    tooltip={item.label}
+                    className="h-11 px-4 rounded-lg transition-all"
+                  >
+                    <Link href={item.href}>
+                      <item.icon className="w-5 h-5" />
+                      <span className="font-medium text-base">{item.label}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarContent>
+
+          <SidebarFooter className="p-4 border-t">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-3 px-2 group-data-[collapsible=icon]:px-0">
+                <Avatar className="w-8 h-8 border">
+                  <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                    {user?.username?.[0]?.toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
+                  <p className="text-sm font-semibold truncate">{user?.username}</p>
+                  <p className="text-xs text-muted-foreground truncate">متصل الآن</p>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-2 group-data-[collapsible=icon]:flex-col">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                  className="rounded-lg h-9 w-9"
+                  title="تبديل النمط"
+                >
+                  {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => logoutMutation.mutate()}
+                  className="rounded-lg h-9 w-9 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  title="تسجيل الخروج"
+                >
+                  <LogOut className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </SidebarFooter>
+        </Sidebar>
+
+        <main className="flex-1 flex flex-col min-w-0 relative">
+          <header className="h-16 border-b flex items-center justify-between px-6 bg-background/80 backdrop-blur-md sticky top-0 z-30">
+            <div className="flex items-center gap-4">
+              <SidebarTrigger className="h-9 w-9" />
+              <div className="h-4 w-[1px] bg-border mx-2 hidden md:block" />
+              <h2 className="text-sm font-medium text-muted-foreground hidden md:block">
+                {navItems.find(i => i.href === location)?.label || "الصفحة الرئيسية"}
+              </h2>
+            </div>
+          </header>
+          <div className="flex-1 overflow-auto p-6 lg:p-8">
+            <div className="max-w-7xl mx-auto space-y-8">
+              {children}
             </div>
           </div>
-          <button 
-            onClick={() => logout()}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded border border-destructive/30 text-destructive hover:bg-destructive/10 hover:border-destructive transition-all text-xs font-mono uppercase tracking-widest"
-          >
-            <LogOut className="w-4 h-4" /> Disconnect
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 h-[calc(100vh-64px)] md:h-screen overflow-y-auto p-4 md:p-8 bg-[url('/grid.svg')] bg-fixed bg-center">
-        <div className="max-w-7xl mx-auto space-y-8 pb-10">
-          {children}
-        </div>
-      </main>
-    </div>
+        </main>
+      </div>
+    </SidebarProvider>
   );
 }
