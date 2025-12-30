@@ -252,59 +252,130 @@ export async function registerRoutes(
 
   // === TASKS ===
   app.get(api.tasks.list.path, async (req, res) => {
-    const tasks = await storage.getTasks();
-    res.json(tasks);
+    logRequest("INFO", api.tasks.list.path, "Fetching all tasks");
+    try {
+      const tasks = await storage.getTasks();
+      logRequest("SUCCESS", api.tasks.list.path, `Retrieved ${tasks.length} tasks`);
+      res.json(tasks);
+    } catch (err: any) {
+      logRequest("ERROR", api.tasks.list.path, "Failed to fetch tasks", { error: err.message });
+      res.status(500).json({ message: 'Failed to fetch tasks' });
+    }
   });
 
   app.get(api.tasks.get.path, async (req, res) => {
-    const task = await storage.getTask(Number(req.params.id));
-    if (!task) return res.status(404).json({ message: 'Task not found' });
-    res.json(task);
+    const taskId = Number(req.params.id);
+    logRequest("INFO", api.tasks.get.path, `Fetching task ${taskId}`);
+    try {
+      const task = await storage.getTask(taskId);
+      if (!task) {
+        logRequest("WARN", api.tasks.get.path, `Task ${taskId} not found`);
+        return res.status(404).json({ message: 'Task not found' });
+      }
+      logRequest("SUCCESS", api.tasks.get.path, `Retrieved task ${taskId}`);
+      res.json(task);
+    } catch (err: any) {
+      logRequest("ERROR", api.tasks.get.path, `Failed to fetch task ${taskId}`, { error: err.message });
+      res.status(500).json({ message: 'Failed to fetch task' });
+    }
   });
 
   app.post(api.tasks.create.path, async (req, res) => {
+    logRequest("INFO", api.tasks.create.path, "Creating new task", {
+      bodyKeys: Object.keys(req.body),
+      bodyData: req.body
+    });
     try {
       const input = api.tasks.create.input.parse(req.body);
+      logRequest("SUCCESS", api.tasks.create.path, "Input validation passed", { input });
       const task = await storage.createTask(input);
+      logRequest("SUCCESS", api.tasks.create.path, `Task created successfully`, {
+        taskId: task.id,
+        taskName: task.name,
+        taskData: task
+      });
       res.status(201).json(task);
     } catch (err) {
-       if (err instanceof z.ZodError) {
+      if (err instanceof z.ZodError) {
+        logRequest("WARN", api.tasks.create.path, "Validation error", {
+          errors: err.errors
+        });
         return res.status(400).json({
           message: err.errors[0].message,
           field: err.errors[0].path.join('.'),
         });
       }
+      logRequest("ERROR", api.tasks.create.path, "Unexpected error", { 
+        error: (err as any).message,
+        stack: (err as any).stack 
+      });
       throw err;
     }
   });
 
   app.put(api.tasks.update.path, async (req, res) => {
+    const taskId = Number(req.params.id);
+    logRequest("INFO", api.tasks.update.path, `Updating task ${taskId}`, {
+      bodyKeys: Object.keys(req.body),
+      bodyData: req.body
+    });
     try {
       const input = api.tasks.update.input.parse(req.body);
-      const task = await storage.updateTask(Number(req.params.id), input);
-      if (!task) return res.status(404).json({ message: 'Task not found' });
+      logRequest("SUCCESS", api.tasks.update.path, `Input validation passed for task ${taskId}`, { input });
+      const task = await storage.updateTask(taskId, input);
+      if (!task) {
+        logRequest("WARN", api.tasks.update.path, `Task ${taskId} not found`);
+        return res.status(404).json({ message: 'Task not found' });
+      }
+      logRequest("SUCCESS", api.tasks.update.path, `Task ${taskId} updated successfully`, { task });
       res.json(task);
     } catch (err) {
-       if (err instanceof z.ZodError) {
+      if (err instanceof z.ZodError) {
+        logRequest("WARN", api.tasks.update.path, `Validation error for task ${taskId}`, {
+          errors: err.errors
+        });
         return res.status(400).json({
           message: err.errors[0].message,
           field: err.errors[0].path.join('.'),
         });
       }
+      logRequest("ERROR", api.tasks.update.path, `Unexpected error updating task ${taskId}`, { 
+        error: (err as any).message,
+        stack: (err as any).stack 
+      });
       throw err;
     }
   });
 
   app.delete(api.tasks.delete.path, async (req, res) => {
-    await storage.deleteTask(Number(req.params.id));
-    res.status(204).send();
+    const taskId = Number(req.params.id);
+    logRequest("INFO", api.tasks.delete.path, `Deleting task ${taskId}`);
+    try {
+      await storage.deleteTask(taskId);
+      logRequest("SUCCESS", api.tasks.delete.path, `Task ${taskId} deleted successfully`);
+      res.status(204).send();
+    } catch (err: any) {
+      logRequest("ERROR", api.tasks.delete.path, `Failed to delete task ${taskId}`, { error: err.message });
+      res.status(500).json({ message: 'Failed to delete task' });
+    }
   });
 
   app.patch(api.tasks.toggle.path, async (req, res) => {
+    const taskId = Number(req.params.id);
     const { isActive } = req.body;
-    const task = await storage.updateTask(Number(req.params.id), { isActive });
-    if (!task) return res.status(404).json({ message: 'Task not found' });
-    res.json(task);
+    logRequest("INFO", api.tasks.toggle.path, `Toggling task ${taskId}`, { isActive });
+    try {
+      const task = await storage.updateTask(taskId, { isActive });
+      if (!task) {
+        logRequest("WARN", api.tasks.toggle.path, `Task ${taskId} not found`);
+        return res.status(404).json({ message: 'Task not found' });
+      }
+      logRequest("SUCCESS", api.tasks.toggle.path, `Task ${taskId} toggled to ${isActive}`, { task });
+      res.json(task);
+    } catch (err: any) {
+      logRequest("ERROR", api.tasks.toggle.path, `Failed to toggle task ${taskId}`, { error: err.message });
+      res.status(500).json({ message: 'Failed to toggle task' });
+    }
   });
 
   // === LOGS ===
