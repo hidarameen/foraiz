@@ -116,10 +116,23 @@ export class MessageForwarder {
         
         const messages = await clientInstance.getMessages(sourceChatId, { ids: messageIds });
         
+        // Extract the first non-empty caption from the album
+        let albumCaption = "";
+        let albumEntities = undefined;
+        for (const msg of messages) {
+          const text = msg.message || msg.text || "";
+          if (text.trim().length > 0) {
+            albumCaption = text;
+            albumEntities = msg.entities;
+            break;
+          }
+        }
+        
         // Use the media objects directly from the fetched messages
         await clientInstance.sendMessage(destination, {
           file: messages.map(msg => msg.media).filter(media => !!media),
-          message: "", // Captions are handled by the media objects
+          message: albumCaption,
+          formattingEntities: albumEntities
         });
 
         await storage.createLog({
