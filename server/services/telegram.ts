@@ -390,61 +390,78 @@ export async function startMessageListener(sessionId: number) {
     // Listen for new messages using the proper event handler
     client.addEventHandler(async (event: any) => {
       try {
-        // Check if this is a new message event
-        if (event.message) {
-          const message = event.message;
-          
-          // Try multiple ways to get the chat ID
-          const chatId = event.chatId?.toString() || 
-                        message.peerId?.channelId?.toString() ||
-                        message.peerId?.userId?.toString() ||
-                        message.peerId?.toString();
-          
-          // Get active tasks
-          const tasks = await storage.getTasks();
-          const sessionTasks = tasks.filter(t => t.sessionId === sessionId && t.isActive);
-          
-          if (sessionTasks.length === 0) return;
+        // Log the raw event for debugging
+        if (event.message || event.update) {
+          console.log(`[Listener] 🕵️ Raw Event Details:`, {
+            hasMessage: !!event.message,
+            messageType: event.message?.className,
+            entities: event.message?.entities?.length,
+            media: !!event.message?.media,
+            rawText: event.message?.text,
+            rawTextLength: event.message?.text?.length,
+            timestamp: new Date().toISOString()
+          });
 
-          // Standardize chatId for comparison
-          const cleanChatId = chatId.replace(/^-100/, "");
+          // Check if this is a new message event
+          if (event.message) {
+            const message = event.message;
+            
+            // Try multiple ways to get the chat ID
+            const chatId = event.chatId?.toString() || 
+                          message.peerId?.channelId?.toString() ||
+                          message.peerId?.userId?.toString() ||
+                          message.peerId?.toString();
+            
+            // Get active tasks
+            const tasks = await storage.getTasks();
+            const sessionTasks = tasks.filter(t => t.sessionId === sessionId && t.isActive);
+            
+            if (sessionTasks.length === 0) return;
 
-          // Check each task
-          for (const task of sessionTasks) {
-            const matchesChannel = task.sourceChannels.some(sourceId => {
-              const cleanSourceId = sourceId.replace(/^-100/, "");
-              return cleanSourceId === cleanChatId;
-            });
+            // Standardize chatId for comparison
+            const cleanChatId = chatId.replace(/^-100/, "");
 
-            if (!matchesChannel) {
-              continue;
-            }
+            // Check each task
+            for (const task of sessionTasks) {
+              const matchesChannel = task.sourceChannels.some(sourceId => {
+                const cleanSourceId = sourceId.replace(/^-100/, "");
+                return cleanSourceId === cleanChatId;
+              });
 
-            console.log(`[Listener] ✅ Task ${task.id} matched! Processing message from ${chatId}`);
+              if (!matchesChannel) {
+                continue;
+              }
 
-            // Check filters
-            const messageText = message.text || "";
-            if (!forwarder.applyFilters(messageText, task.filters)) {
-              continue;
-            }
+              console.log(`[Listener] ✅ Task ${task.id} matched! Processing message from ${chatId}`);
 
-            // Forward message to destinations
-            try {
-              console.log(`[Forwarder] 🚀 Forwarding message via task ${task.id} to:`, task.destinationChannels);
-              console.log(`[Forwarder] 📝 Message Content: "${message.text}"`);
+              // Check filters
+              const messageText = message.text || "";
               
-              await forwarder.forwardMessage(
-                task,
-                message.id?.toString() || `msg_${Date.now()}`,
-                message.text || "",
-                { 
-                  originalMessageId: message.id,
-                  originalText: message.text 
-                }
-              );
-              console.log(`[Forwarder] ✅ Message forwarded via task ${task.id}`);
-            } catch (err) {
-              console.error(`[Forwarder] ❌ Error forwarding message via task ${task.id}:`, err);
+              if (!forwarder.applyFilters(messageText, task.filters)) {
+                console.log(`[Forwarder] 🚫 Message filtered out by task ${task.id}. Text length: ${messageText.length}`);
+                continue;
+              }
+
+              // Forward message to destinations
+              try {
+                console.log(`[Forwarder] 🚀 Forwarding message via task ${task.id} to:`, task.destinationChannels);
+                console.log(`[Forwarder] 📝 Message Content to forward: "${message.text}" (Length: ${message.text?.length || 0})`);
+                
+                await forwarder.forwardMessage(
+                  task,
+                  message.id?.toString() || `msg_${Date.now()}`,
+                  message.text || "",
+                  { 
+                    originalMessageId: message.id,
+                    originalText: message.text,
+                    hasMedia: !!message.media,
+                    entities: message.entities
+                  }
+                );
+                console.log(`[Forwarder] ✅ Message forwarded via task ${task.id}`);
+              } catch (err) {
+                console.error(`[Forwarder] ❌ Error forwarding message via task ${task.id}:`, err);
+              }
             }
           }
         }
