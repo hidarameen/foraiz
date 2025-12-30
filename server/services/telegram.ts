@@ -434,9 +434,11 @@ export async function startMessageListener(sessionId: number) {
 
               console.log(`[Listener] ✅ Task ${task.id} matched! Processing message from ${chatId}`);
 
-              // Check filters
-              const messageText = message.text || "";
+              // IN CHANNELS, THE TEXT IS OFTEN IN message.message
+              const messageText = message.message || message.text || "";
               
+              console.log(`[Listener] 📝 Extracted Text: "${messageText}"`);
+
               if (!forwarder.applyFilters(messageText, task.filters)) {
                 console.log(`[Forwarder] 🚫 Message filtered out by task ${task.id}. Text length: ${messageText.length}`);
                 continue;
@@ -445,18 +447,17 @@ export async function startMessageListener(sessionId: number) {
               // Forward message to destinations
               try {
                 console.log(`[Forwarder] 🚀 Forwarding message via task ${task.id} to:`, task.destinationChannels);
-                console.log(`[Forwarder] 📝 Message Content to forward: "${message.text}" (Length: ${message.text?.length || 0})`);
                 
                 await forwarder.forwardMessage(
                   task,
                   message.id?.toString() || `msg_${Date.now()}`,
-                  message.text || "",
+                  messageText,
                   { 
                     originalMessageId: message.id,
-                    originalText: message.text,
+                    originalText: messageText,
                     hasMedia: !!message.media,
                     entities: message.entities,
-                    rawMessage: message // Pass the raw message object
+                    rawMessage: message
                   }
                 );
                 console.log(`[Forwarder] ✅ Message forwarded via task ${task.id}`);
