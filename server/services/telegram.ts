@@ -156,48 +156,67 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
   log("INFO", phoneNumber, `Attempt #${entry.attemptCount} to sign in`);
 
   try {
-    // Always use client.start() for all authentication scenarios
-    // It handles code verification, password requirement detection, and 2FA
-    entry.authMethod = "start";
-    log("INFO", phoneNumber, "Using client.start() for authentication");
-    
-    await client.start({
-      phoneNumber: async () => {
-        log("INFO", phoneNumber, "phoneNumber callback invoked");
-        return phoneNumber;
-      },
-      phoneCode: async () => {
-        log("INFO", phoneNumber, "phoneCode callback invoked", { codeLength: code.length });
-        return code;
-      },
-      password: async () => {
-        log("INFO", phoneNumber, "password callback invoked");
-        if (!password) {
-          entry.isVerifyingPassword = true;
-          entry.phoneCodeVerified = true;
-          entry.phoneCode = code;
-          log("WARN", phoneNumber, "Password required but not provided - stopping here");
-          throw new Error("PASSWORD_REQUIRED");
-        }
-        log("INFO", phoneNumber, "password callback returning 2FA password");
-        return password;
-      },
-      onError: (err: any) => {
-        log("ERROR", phoneNumber, "client.start() error callback", {
-          errorMessage: err.message,
-          errorCode: err.code
+    // Check if we're retrying with password after phone code verification
+    if (entry.phoneCodeVerified && password) {
+      log("INFO", phoneNumber, "Phone code already verified, attempting to verify password");
+      // Client is already in password verification state
+      // We need to call a different method to verify the password without re-sending the code
+      
+      try {
+        // Try to call signInWithPassword directly
+        log("INFO", phoneNumber, "Calling signInWithPassword method");
+        await (client as any).signInWithPassword(password);
+        log("SUCCESS", phoneNumber, "Password verified successfully");
+      } catch (passwordErr: any) {
+        log("ERROR", phoneNumber, "signInWithPassword failed", {
+          errorMessage: passwordErr.message
         });
-        if (err.message && err.message.includes("PASSWORD")) {
-          entry.isVerifyingPassword = true;
-          entry.phoneCodeVerified = true;
-          entry.phoneCode = code;
-          throw new Error("PASSWORD_REQUIRED");
-        }
-        throw err;
+        // If direct method fails, throw the error
+        throw passwordErr;
       }
-    });
-    
-    log("SUCCESS", phoneNumber, "client.start() completed successfully");
+    } else {
+      // First call or no password - use client.start() normally
+      entry.authMethod = "start";
+      log("INFO", phoneNumber, "Using client.start() for authentication");
+      
+      await client.start({
+        phoneNumber: async () => {
+          log("INFO", phoneNumber, "phoneNumber callback invoked");
+          return phoneNumber;
+        },
+        phoneCode: async () => {
+          log("INFO", phoneNumber, "phoneCode callback invoked", { codeLength: code.length });
+          return code;
+        },
+        password: async () => {
+          log("INFO", phoneNumber, "password callback invoked");
+          if (!password) {
+            entry.isVerifyingPassword = true;
+            entry.phoneCodeVerified = true;
+            entry.phoneCode = code;
+            log("WARN", phoneNumber, "Password required but not provided - stopping here");
+            throw new Error("PASSWORD_REQUIRED");
+          }
+          log("INFO", phoneNumber, "password callback returning 2FA password");
+          return password;
+        },
+        onError: (err: any) => {
+          log("ERROR", phoneNumber, "client.start() error callback", {
+            errorMessage: err.message,
+            errorCode: err.code
+          });
+          if (err.message && err.message.includes("PASSWORD")) {
+            entry.isVerifyingPassword = true;
+            entry.phoneCodeVerified = true;
+            entry.phoneCode = code;
+            throw new Error("PASSWORD_REQUIRED");
+          }
+          throw err;
+        }
+      });
+      
+      log("SUCCESS", phoneNumber, "client.start() completed successfully");
+    }
 
     const sessionString = (client.session as StringSession).save();
     log("INFO", phoneNumber, "Session string generated successfully", {
