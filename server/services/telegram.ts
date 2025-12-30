@@ -231,10 +231,8 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
     // Instead, we use the client that is already waiting at the password step.
     if (entry.phoneCodeVerified && password) {
       log("INFO", phoneNumber, "Processing password for existing session");
-      // Use signin for 2FA instead of client.start() again
-      await client.signin({
-        password: password
-      });
+      // Use checkPassword for 2FA instead of client.start() again
+      await client.checkPassword(password);
     } else {
       entry.authMethod = "start";
       entry.passwordCallbackCount = 0;
