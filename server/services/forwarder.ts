@@ -106,9 +106,19 @@ export class MessageForwarder {
       try {
         console.log(`[Forwarder] Sending album (${messageIds.length} items) as new messages to ${destination}`);
         
-        // Use sendMessages with grouping to send as new messages (hides forward tag)
-        await client.sendMessage(destination, {
-          file: messageIds.map(id => ({ message: id, fromPeer: sourceChatId })),
+        // Fetch all message objects to get their media
+        const { getTelegramClient } = await import("./telegram");
+        const clientInstance = await getTelegramClient(task.sessionId);
+        
+        if (!clientInstance) {
+          throw new Error("No active client for session during album fetch");
+        }
+        
+        const messages = await clientInstance.getMessages(sourceChatId, { ids: messageIds });
+        
+        // Use the media objects directly from the fetched messages
+        await clientInstance.sendMessage(destination, {
+          file: messages.map(msg => msg.media).filter(media => !!media),
           message: "", // Captions are handled by the media objects
         });
 
@@ -165,10 +175,10 @@ export class MessageForwarder {
       if (metadata?.hasMedia && metadata?.originalMessageId && metadata?.fromChatId) {
         console.log(`[Forwarder] Sending media ${metadata.originalMessageId} as new message to ${destination}`);
         
+        const sourcePeer = await client.getInputEntity(metadata.fromChatId);
+        
         await client.sendMessage(destination, {
-          file: { message: metadata.originalMessageId, fromPeer: metadata.fromChatId },
-          // Ensure we don't accidentally send a caption twice if it's already in the media
-          // But usually we want to preserve the original message text as the caption
+          file: metadata.rawMessage.media,
           message: metadata.originalText || content,
           formattingEntities: metadata.entities
         });
