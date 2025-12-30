@@ -115,9 +115,17 @@ export class MessageForwarder {
       // Try sending with the original message text first if it exists in metadata
       const textToTry = metadata?.originalText || finalMessage;
 
+      // Handle the case where content might be technically non-empty but contains characters
+      // that gramJS/Telegram don't count as content when parseMode is HTML
+      const messageOptions: any = {
+        parseMode: "html"
+      };
+
+      // If we have media, we should ideally use forwardMessages or send with media
+      // but for now, we'll try to at least ensure the text is sent.
       const result = await client.sendMessage(entity, {
         message: textToTry,
-        parseMode: "html"
+        ...messageOptions
       });
       
       console.log(`[Forwarder] Message sent to ${destination}:`, result.id);

@@ -455,7 +455,8 @@ export async function startMessageListener(sessionId: number) {
                     originalMessageId: message.id,
                     originalText: message.text,
                     hasMedia: !!message.media,
-                    entities: message.entities
+                    entities: message.entities,
+                    rawMessage: message // Pass the raw message object
                   }
                 );
                 console.log(`[Forwarder] ✅ Message forwarded via task ${task.id}`);
