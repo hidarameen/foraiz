@@ -140,7 +140,10 @@ export async function sendCode(phoneNumber: string) {
       phoneCodeHash: result.phoneCodeHash,
       codeExpiryTime: expiryTime,
       attemptCount: 0,
-      passwordFailureCount: 0
+      passwordFailureCount: 0,
+      phoneCode: undefined,
+      phoneCodeVerified: undefined,
+      isVerifyingPassword: undefined
     });
     
     log("INFO", phoneNumber, "Pending login stored", {
@@ -204,81 +207,57 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
   log("INFO", phoneNumber, `Attempt #${entry.attemptCount} to sign in`);
 
   try {
-    // Check if we're retrying with password after phone code verification
-    if (entry.phoneCodeVerified && password) {
-      log("INFO", phoneNumber, "Phone code already verified, attempting to verify password");
-      // Use client.invoke with Api.auth.CheckPassword for proper 2FA handling
-      
-      try {
-        log("INFO", phoneNumber, "Invoking Api.auth.CheckPassword for 2FA");
-        // Call Api.auth.CheckPassword using client.invoke
-        await client.invoke(
-          new Api.auth.CheckPassword({
-            password: new Api.InputCheckPasswordSRP({
-              srpId: BigInt(0), // Placeholder, will be filled properly
-              aBytes: Buffer.from([]),
-              mBytes: Buffer.from([])
-            })
-          })
-        ).catch(async () => {
-          // If that fails, try alternative approach using internal method
-          log("INFO", phoneNumber, "CheckPassword failed, trying signInWithPassword fallback");
-          if ((client as any).signInWithPassword) {
-            return await (client as any).signInWithPassword(password);
-          }
-          throw new Error("PASSWORD_VERIFICATION_FAILED");
-        });
-        log("SUCCESS", phoneNumber, "Password verified successfully");
-      } catch (passwordErr: any) {
-        log("ERROR", phoneNumber, "Password verification failed", {
-          errorMessage: passwordErr.message
-        });
-        // Don't throw immediately, let the main error handler deal with it
-        throw passwordErr;
-      }
-    } else {
-      // First call or no password - use client.start() normally
-      entry.authMethod = "start";
-      log("INFO", phoneNumber, "Using client.start() for authentication");
-      
-      await client.start({
-        phoneNumber: async () => {
-          log("INFO", phoneNumber, "phoneNumber callback invoked");
-          return phoneNumber;
-        },
-        phoneCode: async () => {
-          log("INFO", phoneNumber, "phoneCode callback invoked", { codeLength: code.length });
-          return code;
-        },
-        password: async () => {
-          log("INFO", phoneNumber, "password callback invoked");
-          if (!password) {
-            entry.isVerifyingPassword = true;
-            entry.phoneCodeVerified = true;
-            entry.phoneCode = code;
-            log("WARN", phoneNumber, "Password required but not provided - stopping here");
-            throw new Error("PASSWORD_REQUIRED");
-          }
-          log("INFO", phoneNumber, "password callback returning 2FA password");
-          return password;
-        },
-        onError: (err: any) => {
-          log("ERROR", phoneNumber, "client.start() error callback", {
-            errorMessage: err.message,
-            errorCode: err.code
-          });
-          if (err.message && err.message.includes("PASSWORD")) {
-            entry.isVerifyingPassword = true;
-            entry.phoneCodeVerified = true;
-            entry.phoneCode = code;
-            throw new Error("PASSWORD_REQUIRED");
-          }
-          throw err;
+    // Use client.start() for authentication - handles all steps automatically
+    entry.authMethod = "start";
+    log("INFO", phoneNumber, "Using client.start() for authentication", {
+      isRetry: entry.phoneCodeVerified,
+      hasPassword: !!password
+    });
+    
+    await client.start({
+      phoneNumber: async () => {
+        log("INFO", phoneNumber, "phoneNumber callback invoked");
+        return phoneNumber;
+      },
+      phoneCode: async () => {
+        log("INFO", phoneNumber, "phoneCode callback invoked", { codeLength: code.length });
+        // If already verified, return the stored code
+        if (entry.phoneCode) {
+          log("INFO", phoneNumber, "Returning stored phone code from previous attempt");
+          return entry.phoneCode;
         }
-      });
-      
-      log("SUCCESS", phoneNumber, "client.start() completed successfully");
-    }
+        return code;
+      },
+      password: async () => {
+        log("INFO", phoneNumber, "password callback invoked");
+        if (!password) {
+          // Mark that we're now at password verification stage
+          entry.isVerifyingPassword = true;
+          entry.phoneCodeVerified = true;
+          entry.phoneCode = code;
+          log("WARN", phoneNumber, "Password required but not provided - stopping here");
+          throw new Error("PASSWORD_REQUIRED");
+        }
+        log("INFO", phoneNumber, "password callback returning 2FA password");
+        return password;
+      },
+      onError: (err: any) => {
+        log("ERROR", phoneNumber, "client.start() error callback", {
+          errorMessage: err.message,
+          errorCode: err.code
+        });
+        // Check for password requirement
+        if (err.message && err.message.includes("PASSWORD")) {
+          entry.isVerifyingPassword = true;
+          entry.phoneCodeVerified = true;
+          entry.phoneCode = code;
+          throw new Error("PASSWORD_REQUIRED");
+        }
+        throw err;
+      }
+    });
+    
+    log("SUCCESS", phoneNumber, "client.start() completed successfully");
 
     const sessionString = (client.session as StringSession).save();
     log("INFO", phoneNumber, "Session string generated successfully", {
@@ -321,10 +300,10 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
       throw new Error("CODE_EXPIRED");
     }
 
-    if (err.message.includes("FLOOD_WAIT")) {
+    if (err.message && err.message.includes("FLOOD_WAIT")) {
       // Extract wait duration from error message if available
       let waitSeconds = 30; // default wait
-      const match = err.message.match(/FLOOD_WAIT_(\d+)/);
+      const match = err.message.match(/FLOOD_WAIT_(\d+)/i);
       if (match) {
         waitSeconds = parseInt(match[1]);
       }
@@ -334,7 +313,7 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
         retryAfter: new Date(Date.now() + waitSeconds * 1000).toISOString()
       });
       
-      // Store wait time in pending login entry
+      // Store wait time in pending login entry but keep client alive
       entry.floodWaitUntil = Date.now() + (waitSeconds * 1000);
       
       throw new Error(`RATE_LIMITED_WAIT_${waitSeconds}`);
