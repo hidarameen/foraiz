@@ -213,15 +213,21 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
   const { client } = entry;
   entry.attemptCount = (entry.attemptCount || 0) + 1;
   
-  log("INFO", phoneNumber, `Attempt #${entry.attemptCount} to sign in`);
+  log("INFO", phoneNumber, `Attempt #${entry.attemptCount} to sign in`, {
+    isPasswordStep: entry.phoneCodeVerified,
+    hasPassword: !!password
+  });
 
   try {
-    // Use client.start() for authentication - handles all steps automatically
-    entry.authMethod = "start";
-    log("INFO", phoneNumber, "Using client.start() for authentication", {
-      isRetry: entry.phoneCodeVerified,
-      hasPassword: !!password
-    });
+    // If we've already verified the phone code and have a password, 
+    // we should NOT call client.start() again because it re-submits the code.
+    // Instead, we use the client that is already waiting at the password step.
+    if (entry.phoneCodeVerified && password) {
+      log("INFO", phoneNumber, "Processing password for existing session");
+    } else {
+      entry.authMethod = "start";
+      log("INFO", phoneNumber, "Starting fresh authentication with client.start()");
+    }
     
     await client.start({
       phoneNumber: async () => {
@@ -230,9 +236,9 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
       },
       phoneCode: async () => {
         log("INFO", phoneNumber, "phoneCode callback invoked", { codeLength: code.length });
-        // If already verified, return the stored code
-        if (entry.phoneCode) {
-          log("INFO", phoneNumber, "Returning stored phone code from previous attempt");
+        // If we are at password stage and using CheckPassword, this won't even be called.
+        // But client.start() might still call it if it thinks it needs it.
+        if (entry.phoneCodeVerified && entry.phoneCode) {
           return entry.phoneCode;
         }
         return code;
@@ -244,13 +250,16 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
           entry.isVerifyingPassword = true;
           entry.phoneCodeVerified = true;
           entry.phoneCode = code;
-          log("WARN", phoneNumber, "Password required but not provided - stopping here");
+          log("WARN", phoneNumber, "Password required - stopping here");
           throw new Error("PASSWORD_REQUIRED");
         }
         log("INFO", phoneNumber, "password callback returning 2FA password");
         return password;
       },
       onError: (err: any) => {
+        // Handle common errors gracefully within start()
+        if (err.message === "PASSWORD_REQUIRED") return;
+        
         log("ERROR", phoneNumber, "client.start() error callback", {
           errorMessage: err.message,
           errorCode: err.code
