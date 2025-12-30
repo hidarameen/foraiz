@@ -87,6 +87,62 @@ export class MessageForwarder {
   }
 
   /**
+   * توجيه ألبوم (مجموعة وسائط)
+   */
+  async forwardAlbum(
+    task: Task,
+    messageIds: number[],
+    sourceChatId: string
+  ): Promise<ForwardingResult[]> {
+    const results: ForwardingResult[] = [];
+    const { getTelegramClient } = await import("./telegram");
+    const client = await getTelegramClient(task.sessionId);
+
+    if (!client) {
+      throw new Error("No active client for session");
+    }
+
+    for (const destination of task.destinationChannels) {
+      try {
+        console.log(`[Forwarder] Forwarding album (${messageIds.length} items) to ${destination}`);
+        
+        await client.forwardMessages(destination, {
+          messages: messageIds,
+          fromPeer: sourceChatId,
+        });
+
+        await storage.createLog({
+          taskId: task.id,
+          sourceChannel: sourceChatId,
+          destinationChannel: destination,
+          messageId: `album_${messageIds[0]}`,
+          status: "success",
+          details: `Album forwarded successfully (${messageIds.length} items)`,
+        });
+
+        results.push({
+          messageId: `album_${messageIds[0]}`,
+          success: true,
+          details: "Album forwarded successfully",
+          timestamp: new Date(),
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        console.error(`[Forwarder] Failed to forward album to ${destination}:`, errorMessage);
+        
+        results.push({
+          messageId: `album_${messageIds[0]}`,
+          success: false,
+          details: errorMessage,
+          timestamp: new Date(),
+        });
+      }
+    }
+
+    return results;
+  }
+
+  /**
    * إرسال رسالة إلى وجهة واحدة
    */
   private async sendToDestination(
@@ -103,42 +159,43 @@ export class MessageForwarder {
         throw new Error("No active client for session");
       }
 
-      // Send message to destination
+      // If it has media, using forwardMessages is the most reliable way to preserve everything
+      if (metadata?.hasMedia && metadata?.originalMessageId && metadata?.fromChatId) {
+        console.log(`[Forwarder] Forwarding media message ${metadata.originalMessageId} to ${destination}`);
+        await client.forwardMessages(destination, {
+          messages: [metadata.originalMessageId],
+          fromPeer: metadata.fromChatId,
+        });
+        
+        return {
+          messageId: metadata.originalMessageId.toString(),
+          success: true,
+          details: "Media message forwarded successfully",
+          timestamp: new Date(),
+        };
+      }
+
+      // Fallback to sending text if no media or forwarding failed
       const entity = await client.getEntity(destination);
-      
-      // LOG CONTENT FOR DEBUGGING
-      console.log(`[Forwarder] Sending to ${destination} with content length: ${content?.length}, value: "${content}"`);
-
-      // If content is still empty or just whitespace despite previous checks
-      const finalMessage = (content && content.trim().length > 0) ? content : " .";
-
-      // Try sending with the original message text first if it exists in metadata
-      const textToTry = metadata?.originalText || finalMessage;
-
-      // Handle the case where content might be technically non-empty but contains characters
-      // that gramJS/Telegram don't count as content when parseMode is HTML
       const messageOptions: any = {};
 
-      // If we have original entities, use them instead of parseMode
       if (metadata?.entities) {
         messageOptions.formattingEntities = metadata.entities;
       } else {
         messageOptions.parseMode = "html";
       }
 
-      // If we have media, we should ideally use forwardMessages or send with media
-      // but for now, we'll try to at least ensure the text is sent.
+      const finalMessage = (content && content.trim().length > 0) ? content : " .";
+
       const result = await client.sendMessage(entity, {
-        message: textToTry,
+        message: finalMessage,
         ...messageOptions
       });
-      
-      console.log(`[Forwarder] Message sent to ${destination}:`, result.id);
       
       return {
         messageId: result.id?.toString() || `${Date.now()}`,
         success: true,
-        details: "Message forwarded successfully",
+        details: "Message sent successfully",
         timestamp: new Date(),
       };
     } catch (error) {
