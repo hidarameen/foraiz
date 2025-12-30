@@ -112,8 +112,11 @@ export class MessageForwarder {
       // If content is still empty or just whitespace despite previous checks
       const finalMessage = (content && content.trim().length > 0) ? content : " .";
 
+      // Try sending with the original message text first if it exists in metadata
+      const textToTry = metadata?.originalText || finalMessage;
+
       const result = await client.sendMessage(entity, {
-        message: finalMessage,
+        message: textToTry,
         parseMode: "html"
       });
       

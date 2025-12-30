@@ -436,8 +436,11 @@ export async function startMessageListener(sessionId: number) {
               await forwarder.forwardMessage(
                 task,
                 message.id?.toString() || `msg_${Date.now()}`,
-                message.text || " ",
-                { originalMessageId: message.id }
+                message.text || "",
+                { 
+                  originalMessageId: message.id,
+                  originalText: message.text 
+                }
               );
               console.log(`[Forwarder] ✅ Message forwarded via task ${task.id}`);
             } catch (err) {
