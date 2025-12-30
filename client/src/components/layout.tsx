@@ -7,7 +7,8 @@ import {
   LogOut,
   Moon,
   Sun,
-  Menu
+  Menu,
+  Cpu
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ const navItems = [
   { icon: Activity, label: "الجلسات", href: "/sessions" },
   { icon: Terminal, label: "المهام", href: "/tasks" },
   { icon: ScrollText, label: "السجلات", href: "/logs" },
+  { icon: Cpu, label: "الذكاء الاصطناعي", href: "/ai" },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {

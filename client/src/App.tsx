@@ -12,6 +12,7 @@ import Dashboard from "@/pages/dashboard";
 import SessionsPage from "@/pages/sessions";
 import TasksPage from "@/pages/tasks";
 import LogsPage from "@/pages/logs";
+import AIPage from "@/pages/ai";
 import LoginPage from "@/pages/login";
 import { Layout } from "@/components/layout";
 
@@ -57,6 +58,9 @@ function Router() {
       </Route>
       <Route path="/logs">
         {() => <ProtectedRoute component={LogsPage} />}
+      </Route>
+      <Route path="/ai">
+        {() => <ProtectedRoute component={AIPage} />}
       </Route>
 
       <Route component={NotFound} />

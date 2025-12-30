@@ -18,10 +18,32 @@ function logRequest(level: string, route: string, message: string, data?: any) {
   }
 }
 
+import { AIService, AI_CONFIG } from "./services/ai";
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // ... (setupAuth and message listeners)
+
+  // === AI ROUTES ===
+  app.get("/api/ai/config", (req, res) => {
+    res.json(AI_CONFIG);
+  });
+
+  app.post("/api/ai/test", async (req, res) => {
+    try {
+      const { provider, model, prompt, apiKey } = req.body;
+      if (!provider || !model || !prompt) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+      const response = await AIService.chat(provider, model, prompt, apiKey);
+      res.json(response);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // 1. Setup Auth
   await setupAuth(app);
   registerAuthRoutes(app);
