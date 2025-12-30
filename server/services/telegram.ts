@@ -436,11 +436,12 @@ client.addEventHandler(async (event: any) => {
 
           if (buffer) {
             buffer.messageIds.push(message.id);
-            // Reset timer
-            clearTimeout(buffer.timer);
-            buffer.timer = setTimeout(() => processAlbum(groupId), 1000);
+            // Reset timer - wait longer for all parts to arrive (5 seconds)
+            if (buffer.timer) clearTimeout(buffer.timer);
+            buffer.timer = setTimeout(() => processAlbum(groupId), 5000);
           } else {
-            const timer = setTimeout(() => processAlbum(groupId), 1000);
+            // First item of the album
+            const timer = setTimeout(() => processAlbum(groupId), 5000);
             albumBuffers.set(groupId, {
               messageIds: [message.id],
               timer,

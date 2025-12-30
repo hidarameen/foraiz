@@ -129,11 +129,11 @@ export class MessageForwarder {
         }
         
         // Use the media objects directly from the fetched messages
+        // We use formattingEntities to preserve all complex formatting like blockquotes and spoilers
         await clientInstance.sendMessage(destination, {
           file: messages.map(msg => msg.media).filter(media => !!media),
           message: albumCaption,
           formattingEntities: albumEntities,
-          parseMode: albumEntities ? undefined : "html"
         });
 
         await storage.createLog({
