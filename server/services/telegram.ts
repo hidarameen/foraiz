@@ -46,6 +46,7 @@ const pendingLogins = new Map<string, {
   phoneCodeHash?: string;
   phoneCode?: string;
   isVerifyingPassword?: boolean;
+  phoneCodeVerified?: boolean; // Phone code accepted, waiting for password
   codeExpiryTime?: number; // Expire codes after 5 minutes
   attemptCount?: number;
 }>();
@@ -152,43 +153,70 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
   log("INFO", phoneNumber, `Attempt #${entry.attemptCount} to sign in`);
 
   try {
-    log("INFO", phoneNumber, "Calling client.start() with credentials");
-    
-    // Use client.start() as it's the most reliable way to handle the full flow including SRP for 2FA
-    await client.start({
-      phoneNumber: async () => {
-        log("INFO", phoneNumber, "phoneNumber callback invoked");
-        return phoneNumber;
-      },
-      phoneCode: async () => {
-        log("INFO", phoneNumber, "phoneCode callback invoked", { codeLength: code.length });
-        return code;
-      },
-      password: async () => {
-        log("INFO", phoneNumber, "password callback invoked");
-        if (!password) {
-          entry.isVerifyingPassword = true;
-          entry.phoneCode = code;
-          log("WARN", phoneNumber, "Password required but not provided");
-          throw new Error("PASSWORD_REQUIRED");
-        }
-        return password;
-      },
-      onError: (err: any) => {
-        log("ERROR", phoneNumber, "client.start() error callback", {
+    // If password is provided and we already verified phone code, use signInWithPassword
+    if (password && entry.phoneCodeVerified) {
+      log("INFO", phoneNumber, "Phone code was verified, now processing 2FA password");
+      try {
+        // Try to sign in with password using the existing client session
+        log("INFO", phoneNumber, "Calling signInWithPassword");
+        await (client as any).signInWithPassword(password);
+        log("SUCCESS", phoneNumber, "2FA password accepted successfully");
+      } catch (err: any) {
+        log("ERROR", phoneNumber, "2FA password rejected", {
           errorMessage: err.message,
           errorCode: err.code
         });
-        if (err.message.includes("SESSION_PASSWORD_NEEDED") || err.message.includes("PASSWORD_REQUIRED")) {
-          entry.isVerifyingPassword = true;
-          entry.phoneCode = code;
-          throw new Error("PASSWORD_REQUIRED");
+        if (err.message.includes("PASSWORD_INVALID")) {
+          throw new Error("PASSWORD_INVALID");
         }
         throw err;
       }
-    });
-
-    log("SUCCESS", phoneNumber, "client.start() completed successfully");
+    } else if (password && entry.isVerifyingPassword && !entry.phoneCodeVerified) {
+      log("INFO", phoneNumber, "Second attempt: phone code still needed first");
+      // This shouldn't happen, but handle it just in case
+      throw new Error("INVALID_REQUEST_SEQUENCE");
+    } else {
+      // First attempt - use client.start() for initial authentication
+      log("INFO", phoneNumber, "Calling client.start() with phone number and code");
+      
+      await client.start({
+        phoneNumber: async () => {
+          log("INFO", phoneNumber, "phoneNumber callback invoked");
+          return phoneNumber;
+        },
+        phoneCode: async () => {
+          log("INFO", phoneNumber, "phoneCode callback invoked", { codeLength: code.length });
+          return code;
+        },
+        password: async () => {
+          log("INFO", phoneNumber, "password callback invoked - server needs 2FA password");
+          if (!password) {
+            entry.isVerifyingPassword = true;
+            entry.phoneCodeVerified = true; // Mark that phone code was accepted
+            entry.phoneCode = code;
+            log("WARN", phoneNumber, "Password required but not provided");
+            throw new Error("PASSWORD_REQUIRED");
+          }
+          log("INFO", phoneNumber, "Password callback received password, returning it");
+          return password;
+        },
+        onError: (err: any) => {
+          log("ERROR", phoneNumber, "client.start() error callback", {
+            errorMessage: err.message,
+            errorCode: err.code
+          });
+          if (err.message.includes("SESSION_PASSWORD_NEEDED") || err.message.includes("PASSWORD_REQUIRED")) {
+            entry.isVerifyingPassword = true;
+            entry.phoneCodeVerified = true;
+            entry.phoneCode = code;
+            throw new Error("PASSWORD_REQUIRED");
+          }
+          throw err;
+        }
+      });
+      
+      log("SUCCESS", phoneNumber, "client.start() completed successfully");
+    }
 
     const sessionString = (client.session as StringSession).save();
     log("INFO", phoneNumber, "Session string generated successfully", {
@@ -235,6 +263,11 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
       await client.disconnect().catch(() => {});
       pendingLogins.delete(phoneNumber);
       throw new Error("RATE_LIMITED");
+    }
+
+    if (err.message.includes("PASSWORD_INVALID")) {
+      log("ERROR", phoneNumber, "Invalid password provided for 2FA");
+      throw new Error("INVALID_PASSWORD");
     }
 
     await client.disconnect().catch(() => {});

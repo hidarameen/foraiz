@@ -198,6 +198,14 @@ export async function registerRoutes(
             });
           }
 
+          if (err.message === "INVALID_PASSWORD") {
+            logRequest("WARN", api.sessions.login.path, "Invalid 2FA password");
+            return res.status(400).json({ 
+              message: "كلمة المرور غير صحيحة. تأكد من إدخال كلمة مرور التحقق بخطوتين بشكل صحيح.",
+              errorCode: "INVALID_PASSWORD"
+            });
+          }
+
           // Generic error
           logRequest("ERROR", api.sessions.login.path, "Unexpected error during sign in", {
             errorMessage: err.message,
