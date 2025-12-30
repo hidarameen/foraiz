@@ -53,9 +53,9 @@ export async function registerRoutes(
         return res.json({ status: 'code_sent', phoneCodeHash: hash });
       }
       
-      if (phoneNumber && code && phoneCodeHash) {
+      if (phoneNumber && code) {
         try {
-          const sessionString = await signIn(phoneNumber, phoneCodeHash, code, password);
+          const sessionString = await signIn(phoneNumber, code, password);
           
           const session = await storage.createSession({
             sessionName: `Account ${phoneNumber}`,

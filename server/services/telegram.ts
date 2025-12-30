@@ -29,11 +29,9 @@ export async function getTelegramClient(sessionId: number): Promise<TelegramClie
 }
 
 // Global store to keep clients alive across API calls
-// key is phoneNumber, value is { client: TelegramClient, timestamp: number }
-const pendingClients = new Map<string, { client: TelegramClient; timestamp: number }>();
+const pendingClients = new Map<string, { client: TelegramClient; timestamp: number; phoneCodeHash: string }>();
 
 export async function sendCode(phoneNumber: string) {
-  // If there's already a pending client for this number, disconnect it first
   if (pendingClients.has(phoneNumber)) {
     const old = pendingClients.get(phoneNumber);
     await old?.client.disconnect();
@@ -52,10 +50,8 @@ export async function sendCode(phoneNumber: string) {
     phoneNumber
   );
   
-  // Keep the client alive in memory
-  pendingClients.set(phoneNumber, { client, timestamp: Date.now() });
+  pendingClients.set(phoneNumber, { client, timestamp: Date.now(), phoneCodeHash });
   
-  // Cleanup logic (15 minutes expiry)
   setTimeout(async () => {
     const entry = pendingClients.get(phoneNumber);
     if (entry && Date.now() - entry.timestamp >= 15 * 60 * 1000) {
@@ -67,59 +63,37 @@ export async function sendCode(phoneNumber: string) {
   return phoneCodeHash;
 }
 
-export async function signIn(phoneNumber: string, phoneCodeHash: string, code: string, password?: string) {
+export async function signIn(phoneNumber: string, code: string, password?: string) {
   const entry = pendingClients.get(phoneNumber);
   
   if (!entry || !entry.client) {
     throw new Error("SESSION_EXPIRED_OR_NOT_FOUND");
   }
 
-  const client = entry.client;
+  const { client, phoneCodeHash } = entry;
 
   try {
-    // Check if 2FA is needed based on state or previous attempt
-    if (password) {
-        await (client as any).signIn({
-            phoneNumber,
-            phoneCodeHash,
-            phoneCode: code,
-            password: async () => password,
-            onError: (err: any) => {
-                throw err;
-            }
-        });
-    } else {
-        try {
-          await client.invoke(
-            new Api.auth.SignIn({
-              phoneNumber,
-              phoneCodeHash,
-              phoneCode: code,
-            })
-          );
-        } catch (err: any) {
-          if (err.message.includes("SESSION_PASSWORD_NEEDED")) {
-             throw new Error("PASSWORD_REQUIRED");
-          } else {
-            throw err;
-          }
+    await client.start({
+      phoneNumber: () => Promise.resolve(phoneNumber),
+      password: () => Promise.resolve(password || ""),
+      phoneCode: () => Promise.resolve(code),
+      onError: (err) => {
+        if (err.message.includes("SESSION_PASSWORD_NEEDED")) {
+           throw new Error("PASSWORD_REQUIRED");
         }
-    }
+        throw err;
+      }
+    });
 
-    // Success! Save the session
     const sessionString = (client.session as StringSession).save();
-    
     await client.disconnect();
     pendingClients.delete(phoneNumber);
     
     return sessionString;
   } catch (err: any) {
     if (err.message === "PASSWORD_REQUIRED") {
-      // Don't disconnect, we need this client for the next request
       throw err;
     }
-    
-    // For other errors, cleanup
     await client.disconnect();
     pendingClients.delete(phoneNumber);
     throw new Error(err.message || "Failed to sign in");
