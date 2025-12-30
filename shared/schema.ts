@@ -14,6 +14,15 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// AI Provider Configurations
+export const aiConfigs = pgTable("ai_configs", {
+  id: serial("id").primaryKey(),
+  provider: text("provider").notNull().unique(), // openai, anthropic, etc.
+  apiKey: text("api_key"),
+  isActive: boolean("is_active").default(false),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Telegram Sessions (Connected Accounts)
 export const sessions = pgTable("sessions", {
   id: serial("id").primaryKey(),
@@ -36,7 +45,6 @@ export const tasks = pgTable("tasks", {
   destinationChannels: text("destination_channels").array().notNull(), // List of Chat IDs or Usernames
   
   // Filters & Options stored as JSON for flexibility
-  // Example: { keywords: ["urgent", "sale"], exclude: ["spam"], mediaTypes: ["photo", "video"] }
   filters: jsonb("filters").$type<{
     keywords?: string[];
     excludeKeywords?: string[];
@@ -45,7 +53,6 @@ export const tasks = pgTable("tasks", {
   }>().default({}),
   
   // Forwarding Options
-  // Example: { withCaption: true, dropAuthor: false, delay: 0 }
   options: jsonb("options").$type<{
     withCaption?: boolean;
     dropAuthor?: boolean; // Send as copy vs forward
@@ -73,18 +80,15 @@ export const logs = pgTable("logs", {
 });
 
 // === RELATIONS ===
-// (Defined implicitly via references for now)
 
 // === BASE SCHEMAS ===
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 
-// Regular username/password login schema
 export const loginSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
-// Telegram login schema (for phone-based authentication)
 export const telegramLoginSchema = z.object({
   phoneNumber: z.string(),
   code: z.string().optional(),
@@ -95,6 +99,7 @@ export const telegramLoginSchema = z.object({
 export const insertSessionSchema = createInsertSchema(sessions).omit({ id: true, createdAt: true, lastActive: true });
 export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true, createdAt: true, status: true, errorMessage: true });
 export const insertLogSchema = createInsertSchema(logs).omit({ id: true, timestamp: true });
+export const insertAiConfigSchema = createInsertSchema(aiConfigs).omit({ id: true, updatedAt: true });
 
 // === TYPES ===
 export type User = typeof users.$inferSelect;
@@ -109,11 +114,12 @@ export type InsertTask = z.infer<typeof insertTaskSchema>;
 export type Log = typeof logs.$inferSelect;
 export type InsertLog = z.infer<typeof insertLogSchema>;
 
-// Request Types
+export type AIConfig = typeof aiConfigs.$inferSelect;
+export type InsertAIConfig = z.infer<typeof insertAiConfigSchema>;
+
 export type CreateTaskRequest = InsertTask;
 export type UpdateTaskRequest = Partial<InsertTask>;
 export type CreateSessionRequest = InsertSession;
 
-// Types for complex JSON fields
 export type TaskFilters = NonNullable<Task["filters"]>;
 export type TaskOptions = NonNullable<Task["options"]>;

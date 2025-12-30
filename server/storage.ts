@@ -1,10 +1,11 @@
 import { db } from "./db";
 import { 
-  users, sessions, tasks, logs,
+  users, sessions, tasks, logs, aiConfigs,
   type Session, type InsertSession,
   type Task, type InsertTask,
   type Log, type InsertLog,
-  type User, type InsertUser
+  type User, type InsertUser,
+  type AIConfig, type InsertAIConfig
 } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 
@@ -30,6 +31,11 @@ export interface IStorage {
   // Logs
   getLogs(limit?: number): Promise<Log[]>;
   createLog(log: InsertLog): Promise<Log>;
+
+  // AI Configs
+  getAIConfigs(): Promise<AIConfig[]>;
+  getAIConfigByProvider(provider: string): Promise<AIConfig | undefined>;
+  upsertAIConfig(config: InsertAIConfig): Promise<AIConfig>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -104,6 +110,32 @@ export class DatabaseStorage implements IStorage {
   async createLog(insertLog: InsertLog): Promise<Log> {
     const [log] = await db.insert(logs).values(insertLog).returning();
     return log;
+  }
+
+  // === AI CONFIGS ===
+  async getAIConfigs(): Promise<AIConfig[]> {
+    return await db.select().from(aiConfigs);
+  }
+
+  async getAIConfigByProvider(provider: string): Promise<AIConfig | undefined> {
+    const [config] = await db.select().from(aiConfigs).where(eq(aiConfigs.provider, provider));
+    return config;
+  }
+
+  async upsertAIConfig(insertConfig: InsertAIConfig): Promise<AIConfig> {
+    const [config] = await db
+      .insert(aiConfigs)
+      .values(insertConfig)
+      .onConflictDoUpdate({
+        target: aiConfigs.provider,
+        set: {
+          apiKey: insertConfig.apiKey,
+          isActive: insertConfig.isActive,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return config;
   }
 }
 

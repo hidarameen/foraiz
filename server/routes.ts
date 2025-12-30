@@ -31,6 +31,20 @@ export async function registerRoutes(
     res.json(AI_CONFIG);
   });
 
+  app.get("/api/ai/settings", async (req, res) => {
+    const configs = await storage.getAIConfigs();
+    res.json(configs);
+  });
+
+  app.post("/api/ai/settings", async (req, res) => {
+    try {
+      const config = await storage.upsertAIConfig(req.body);
+      res.json(config);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/ai/test", async (req, res) => {
     try {
       const { provider, model, prompt, apiKey } = req.body;
