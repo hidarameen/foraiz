@@ -162,18 +162,6 @@ export default function TasksPage() {
                   </div>
                 </div>
               </div>
-              
-              {/* Filters summary */}
-              {(task.filters as any)?.keywords?.length > 0 && (
-                <div className="mt-6 pt-6 border-t flex flex-wrap gap-2 items-center">
-                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">الفلاتر النشطة:</span> 
-                  {(task.filters as any).keywords.map((keyword: string, kIdx: number) => (
-                    <span key={kIdx} className="text-xs bg-muted px-2 py-1 rounded border shadow-sm">
-                      {keyword}
-                    </span>
-                  ))}
-                </div>
-              )}
             </CardContent>
           </Card>
         ))}
@@ -317,67 +305,6 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
               <p className="text-[10px] text-muted-foreground">القنوات التي سيتم تحويل الرسائل إليها.</p>
             </div>
           </div>
-
-          <Accordion type="single" collapsible className="w-full border rounded-xl bg-muted/30 overflow-hidden">
-            <AccordionItem value="filters" className="border-b-0">
-              <AccordionTrigger className="hover:no-underline px-6 py-4 font-semibold text-primary hover:bg-muted/50 transition-colors">
-                الفلاتر والخيارات المتقدمة
-              </AccordionTrigger>
-              <AccordionContent className="space-y-6 px-6 pb-6 pt-4 border-t">
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase text-muted-foreground">الكلمات المفتاحية المطلوبة</Label>
-                    <Input 
-                      placeholder="عاجل، بيع، مهم" 
-                      className="h-10 text-sm"
-                      {...form.register("filters.keywords")} 
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase text-muted-foreground">الكلمات المستبعدة</Label>
-                    <Input 
-                      placeholder="إعلان، سبام، ترويجي" 
-                      className="h-10 text-sm"
-                      {...form.register("filters.excludeKeywords")}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-4 pt-4 border-t">
-                  <Label className="text-xs font-bold uppercase text-muted-foreground">خيارات التحويل</Label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="flex items-center space-x-3 space-x-reverse border p-4 rounded-xl bg-background/50">
-                      <Controller
-                        control={form.control}
-                        name="options.withCaption"
-                        render={({ field }) => (
-                          <Checkbox id="caption" checked={field.value} onCheckedChange={field.onChange} />
-                        )}
-                      />
-                      <label htmlFor="caption" className="text-sm font-medium leading-none cursor-pointer">
-                        الحفاظ على نص الصورة (Caption)
-                      </label>
-                    </div>
-                    
-                    <div className="flex items-center space-x-3 space-x-reverse border p-4 rounded-xl bg-background/50">
-                      <Controller
-                        control={form.control}
-                        name="options.dropAuthor"
-                        render={({ field }) => (
-                          <Checkbox id="author" checked={field.value} onCheckedChange={field.onChange} />
-                        )}
-                      />
-                      <label htmlFor="author" className="text-sm font-medium leading-none cursor-pointer">
-                        إزالة اسم المرسل الأصلي (نسخ)
-                      </label>
-                    </div>
-                  </div>
-                </div>
-
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
 
           <Button type="submit" disabled={create.isPending || update.isPending} className="w-full h-12 font-bold text-lg rounded-lg shadow-lg shadow-primary/20">
             {(create.isPending || update.isPending) && <Loader2 className="w-5 h-5 animate-spin me-2" />}
