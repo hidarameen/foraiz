@@ -20,7 +20,7 @@ export async function getTelegramClient(sessionId: number): Promise<TelegramClie
     new StringSession(sessionData.sessionString),
     apiId,
     apiHash,
-    { connectionRetries: 5 }
+    { connectionRetries: 5, useWSS: false }
   );
 
   await client.connect();
@@ -28,51 +28,70 @@ export async function getTelegramClient(sessionId: number): Promise<TelegramClie
   return client;
 }
 
+// Temporary storage for clients during the login process to keep the connection alive
+const pendingClients = new Map<string, TelegramClient>();
+
 export async function sendCode(phoneNumber: string) {
   const client = new TelegramClient(new StringSession(""), apiId, apiHash, {
     connectionRetries: 5,
+    useWSS: false,
   });
   await client.connect();
   const { phoneCodeHash } = await client.sendCode(
     { apiId, apiHash },
     phoneNumber
   );
-  // We don't store the client here because we need the code to finish sign in
-  // The client will be recreated with the string session later
-  await client.disconnect();
+  
+  // Store the client using the phone number as key
+  pendingClients.set(phoneNumber, client);
+  
+  // Cleanup old pending clients (older than 15 minutes)
+  setTimeout(() => {
+    if (pendingClients.has(phoneNumber)) {
+      const c = pendingClients.get(phoneNumber);
+      c?.disconnect();
+      pendingClients.delete(phoneNumber);
+    }
+  }, 15 * 60 * 1000);
+
   return phoneCodeHash;
 }
 
 export async function signIn(phoneNumber: string, phoneCodeHash: string, code: string, password?: string) {
-  const client = new TelegramClient(new StringSession(""), apiId, apiHash, {
-    connectionRetries: 5,
-  });
-  await client.connect();
+  const client = pendingClients.get(phoneNumber);
+  
+  if (!client) {
+    throw new Error("SESSION_EXPIRED_OR_NOT_FOUND");
+  }
 
   try {
-    await client.invoke(
-      new Api.auth.SignIn({
-        phoneNumber,
-        phoneCodeHash,
-        phoneCode: code,
-      })
-    );
+    try {
+      await client.invoke(
+        new Api.auth.SignIn({
+          phoneNumber,
+          phoneCodeHash,
+          phoneCode: code,
+        })
+      );
+    } catch (err: any) {
+      if (err.message.includes("SESSION_PASSWORD_NEEDED")) {
+        if (!password) {
+          throw new Error("PASSWORD_REQUIRED");
+        }
+        await client.signIn({
+          password: async () => password,
+        } as any);
+      } else {
+        throw err;
+      }
+    }
 
     const sessionString = (client.session as StringSession).save();
+    // After successful login, we can remove it from pending and potentially move to active
+    pendingClients.delete(phoneNumber);
     return sessionString;
   } catch (err: any) {
-    if (err.message.includes("SESSION_PASSWORD_NEEDED")) {
-      if (!password) {
-        throw new Error("PASSWORD_REQUIRED");
-      }
-      await client.signIn({
-        password: async () => password,
-      } as any);
-      const sessionString = (client.session as StringSession).save();
-      return sessionString;
-    }
+    if (err.message === "PASSWORD_REQUIRED") throw err;
     throw new Error(err.message || "Failed to sign in");
-  } finally {
-    await client.disconnect();
   }
 }

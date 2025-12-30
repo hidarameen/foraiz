@@ -69,6 +69,9 @@ export async function registerRoutes(
           if (err.message === "PASSWORD_REQUIRED") {
             return res.json({ status: 'password_required' });
           }
+          if (err.message === "SESSION_EXPIRED_OR_NOT_FOUND") {
+             return res.status(400).json({ message: "انتهت صلاحية الجلسة، يرجى طلب رمز جديد." });
+          }
           throw err;
         }
       }
