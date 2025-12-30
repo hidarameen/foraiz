@@ -106,9 +106,11 @@ export class MessageForwarder {
       // Send message to destination
       const entity = await client.getEntity(destination);
       
-      // If content is just a space or empty, and we have no file, 
-      // Telegram might still complain if we use parseMode with empty string
-      const finalMessage = content && content.trim().length > 0 ? content : " ";
+      // LOG CONTENT FOR DEBUGGING
+      console.log(`[Forwarder] Sending to ${destination} with content length: ${content?.length}, value: "${content}"`);
+
+      // If content is still empty or just whitespace despite previous checks
+      const finalMessage = (content && content.trim().length > 0) ? content : " .";
 
       const result = await client.sendMessage(entity, {
         message: finalMessage,
