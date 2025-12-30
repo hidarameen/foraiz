@@ -431,16 +431,12 @@ export async function startMessageListener(sessionId: number) {
             // Forward message to destinations
             try {
               console.log(`[Forwarder] 🚀 Forwarding message via task ${task.id} to:`, task.destinationChannels);
+              console.log(`[Forwarder] 📝 Message Content: "${message.text}"`);
               
-              // Ensure we have text to send, default to a space if empty to avoid Telegram error
-              // if it's just a text forward without media. 
-              // The forwarder might be trying to send an empty string.
-              const textToSend = messageText || " ";
-
               await forwarder.forwardMessage(
                 task,
                 message.id?.toString() || `msg_${Date.now()}`,
-                textToSend,
+                message.text || " ",
                 { originalMessageId: message.id }
               );
               console.log(`[Forwarder] ✅ Message forwarded via task ${task.id}`);
