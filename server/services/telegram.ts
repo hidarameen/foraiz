@@ -390,11 +390,34 @@ export async function startMessageListener(sessionId: number) {
 // Store grouped messages (albums)
 const albumBuffers = new Map<string, {
   messageIds: number[];
-  timer: NodeJS.Timeout;
+  timer: any;
   task: any;
   sessionId: number;
   chatId: string;
 }>();
+
+// Helper function to process albums
+async function processAlbum(groupId: string) {
+  const buffer = albumBuffers.get(groupId);
+  if (!buffer) return;
+
+  const { messageIds, task, chatId } = buffer;
+  albumBuffers.delete(groupId);
+
+  console.log(`[Listener] 📸 Processing album with ${messageIds.length} items for task ${task.id}`);
+
+  try {
+    const { forwarder } = await import("./forwarder");
+    await forwarder.forwardAlbum(
+      task,
+      messageIds,
+      chatId
+    );
+    console.log(`[Listener] ✅ Album forwarded successfully`);
+  } catch (err) {
+    console.error(`[Listener] ❌ Error forwarding album:`, err);
+  }
+}
 
 // Listen for new messages using the proper event handler
 client.addEventHandler(async (event: any) => {
@@ -460,6 +483,7 @@ client.addEventHandler(async (event: any) => {
         
         // Forward message to destinations using the most reliable method
         try {
+          const { forwarder } = await import("./forwarder");
           console.log(`[Forwarder] 🚀 Forwarding message via task ${task.id} to:`, task.destinationChannels);
           
           await forwarder.forwardMessage(
@@ -485,27 +509,6 @@ client.addEventHandler(async (event: any) => {
     console.error(`[Listener] ❌ Error processing message event:`, err);
   }
 });
-
-async function processAlbum(groupId: string) {
-  const buffer = albumBuffers.get(groupId);
-  if (!buffer) return;
-
-  const { messageIds, task, chatId } = buffer;
-  albumBuffers.delete(groupId);
-
-  console.log(`[Listener] 📸 Processing album with ${messageIds.length} items for task ${task.id}`);
-
-  try {
-    await forwarder.forwardAlbum(
-      task,
-      messageIds,
-      chatId
-    );
-    console.log(`[Listener] ✅ Album forwarded successfully`);
-  } catch (err) {
-    console.error(`[Listener] ❌ Error forwarding album:`, err);
-  }
-}
 
     console.log(`[Listener] ✅ Message listener registered successfully for session ${sessionId}`);
   } catch (err) {

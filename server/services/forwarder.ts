@@ -130,6 +130,7 @@ export class MessageForwarder {
         
         // Use the media objects directly from the fetched messages
         // We use formattingEntities to preserve all complex formatting like blockquotes and spoilers
+        // IMPORTANT: We must also pass formattingEntities to allow Telegram to process the entities correctly
         await clientInstance.sendMessage(destination, {
           file: messages.map(msg => msg.media).filter(media => !!media),
           message: albumCaption,
