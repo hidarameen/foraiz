@@ -132,7 +132,8 @@ export class MessageForwarder {
         await clientInstance.sendMessage(destination, {
           file: messages.map(msg => msg.media).filter(media => !!media),
           message: albumCaption,
-          formattingEntities: albumEntities
+          formattingEntities: albumEntities,
+          parseMode: albumEntities ? undefined : "html"
         });
 
         await storage.createLog({
