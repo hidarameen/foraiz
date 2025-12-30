@@ -30,16 +30,31 @@ export function useCreateTask() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: CreateTaskRequest) => {
+      console.log("🚀 CREATE TASK: Sending request", { data });
       const res = await fetch(api.tasks.create.path, {
         method: api.tasks.create.method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
         credentials: "include",
       });
-      if (!res.ok) throw new Error("Failed to create task");
-      return api.tasks.create.responses[201].parse(await res.json());
+      console.log("📨 CREATE TASK: Response received", { status: res.status, statusText: res.statusText });
+      const responseData = await res.json();
+      console.log("📦 CREATE TASK: Response data", { responseData });
+      if (!res.ok) {
+        console.error("❌ CREATE TASK: Failed", { responseData });
+        throw new Error(`Failed to create task: ${responseData?.message || "Unknown error"}`);
+      }
+      const parsed = api.tasks.create.responses[201].parse(responseData);
+      console.log("✅ CREATE TASK: Success", { parsed });
+      return parsed;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [api.tasks.list.path] }),
+    onSuccess: (data) => {
+      console.log("🎉 CREATE TASK: Invalidating queries", { taskId: data.id });
+      queryClient.invalidateQueries({ queryKey: [api.tasks.list.path] });
+    },
+    onError: (error) => {
+      console.error("🔴 CREATE TASK: Mutation error", { error: (error as Error).message });
+    }
   });
 }
 

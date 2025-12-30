@@ -155,6 +155,7 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
   });
 
   const onSubmit = (data: any) => {
+    console.log("📝 FORM SUBMIT: Raw form data", { data, formErrors: form.formState.errors });
     const payload = {
       ...data,
       filters: {
@@ -164,13 +165,33 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
       }
     };
 
+    console.log("🎯 FORM SUBMIT: Final payload", { payload });
+
     if (task) {
+      console.log("✏️ FORM SUBMIT: Updating task", { taskId: task.id });
       update.mutate({ id: task.id, ...payload }, {
-        onSuccess: () => { setOpen(false); toast({ title: "تم تحديث المهمة" }); }
+        onSuccess: () => { 
+          console.log("✅ UPDATE SUCCESS");
+          setOpen(false); 
+          toast({ title: "تم تحديث المهمة" }); 
+        },
+        onError: (error) => {
+          console.error("❌ UPDATE ERROR", { error: (error as Error).message });
+          toast({ title: "خطأ", description: (error as Error).message, variant: "destructive" });
+        }
       });
     } else {
+      console.log("✏️ FORM SUBMIT: Creating new task");
       create.mutate(payload, {
-        onSuccess: () => { setOpen(false); toast({ title: "تم إنشاء المهمة" }); }
+        onSuccess: () => { 
+          console.log("✅ CREATE SUCCESS");
+          setOpen(false); 
+          toast({ title: "تم إنشاء المهمة" }); 
+        },
+        onError: (error) => {
+          console.error("❌ CREATE ERROR", { error: (error as Error).message });
+          toast({ title: "خطأ", description: (error as Error).message, variant: "destructive" });
+        }
       });
     }
   };
