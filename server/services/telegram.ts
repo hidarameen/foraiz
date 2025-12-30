@@ -28,28 +28,38 @@ export async function getTelegramClient(sessionId: number): Promise<TelegramClie
   return client;
 }
 
-// Temporary storage for clients during the login process to keep the connection alive
-const pendingClients = new Map<string, TelegramClient>();
+// Global store to keep clients alive across API calls
+// key is phoneNumber, value is { client: TelegramClient, timestamp: number }
+const pendingClients = new Map<string, { client: TelegramClient; timestamp: number }>();
 
 export async function sendCode(phoneNumber: string) {
+  // If there's already a pending client for this number, disconnect it first
+  if (pendingClients.has(phoneNumber)) {
+    const old = pendingClients.get(phoneNumber);
+    await old?.client.disconnect();
+    pendingClients.delete(phoneNumber);
+  }
+
   const client = new TelegramClient(new StringSession(""), apiId, apiHash, {
     connectionRetries: 5,
     useWSS: false,
   });
+  
   await client.connect();
+  
   const { phoneCodeHash } = await client.sendCode(
     { apiId, apiHash },
     phoneNumber
   );
   
-  // Store the client using the phone number as key
-  pendingClients.set(phoneNumber, client);
+  // Keep the client alive in memory
+  pendingClients.set(phoneNumber, { client, timestamp: Date.now() });
   
-  // Cleanup old pending clients (older than 15 minutes)
-  setTimeout(() => {
-    if (pendingClients.has(phoneNumber)) {
-      const c = pendingClients.get(phoneNumber);
-      c?.disconnect();
+  // Cleanup logic (15 minutes expiry)
+  setTimeout(async () => {
+    const entry = pendingClients.get(phoneNumber);
+    if (entry && Date.now() - entry.timestamp >= 15 * 60 * 1000) {
+      await entry.client.disconnect();
       pendingClients.delete(phoneNumber);
     }
   }, 15 * 60 * 1000);
@@ -58,13 +68,16 @@ export async function sendCode(phoneNumber: string) {
 }
 
 export async function signIn(phoneNumber: string, phoneCodeHash: string, code: string, password?: string) {
-  const client = pendingClients.get(phoneNumber);
+  const entry = pendingClients.get(phoneNumber);
   
-  if (!client) {
+  if (!entry || !entry.client) {
     throw new Error("SESSION_EXPIRED_OR_NOT_FOUND");
   }
 
+  const client = entry.client;
+
   try {
+    // Attempt standard sign in
     try {
       await client.invoke(
         new Api.auth.SignIn({
@@ -74,10 +87,14 @@ export async function signIn(phoneNumber: string, phoneCodeHash: string, code: s
         })
       );
     } catch (err: any) {
+      // Check if 2FA is needed
       if (err.message.includes("SESSION_PASSWORD_NEEDED")) {
         if (!password) {
+          // Keep the client alive for the next call with password
           throw new Error("PASSWORD_REQUIRED");
         }
+        
+        // Use the existing client to complete 2FA
         await client.signIn({
           password: async () => password,
         } as any);
@@ -86,12 +103,25 @@ export async function signIn(phoneNumber: string, phoneCodeHash: string, code: s
       }
     }
 
+    // Success! Save the session
     const sessionString = (client.session as StringSession).save();
-    // After successful login, we can remove it from pending and potentially move to active
+    
+    // We don't disconnect here if we want to move it to activeClients immediately, 
+    // but for now let's disconnect to keep it clean, as the forwarder service 
+    // will create its own client when needed.
+    await client.disconnect();
     pendingClients.delete(phoneNumber);
+    
     return sessionString;
   } catch (err: any) {
-    if (err.message === "PASSWORD_REQUIRED") throw err;
+    if (err.message === "PASSWORD_REQUIRED") {
+      // Don't disconnect, we need this client for the next request
+      throw err;
+    }
+    
+    // For other errors, cleanup
+    await client.disconnect();
+    pendingClients.delete(phoneNumber);
     throw new Error(err.message || "Failed to sign in");
   }
 }
