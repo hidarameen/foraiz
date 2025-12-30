@@ -75,10 +75,15 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
   try {
     await client.start({
       phoneNumber: () => Promise.resolve(phoneNumber),
-      password: () => Promise.resolve(password || ""),
+      password: () => {
+        if (!password) {
+          return Promise.reject(new Error("PASSWORD_REQUIRED"));
+        }
+        return Promise.resolve(password);
+      },
       phoneCode: () => Promise.resolve(code),
       onError: (err) => {
-        if (err.message.includes("SESSION_PASSWORD_NEEDED")) {
+        if (err.message.includes("SESSION_PASSWORD_NEEDED") || err.message.includes("Password is empty")) {
            throw new Error("PASSWORD_REQUIRED");
         }
         throw err;
