@@ -78,8 +78,10 @@ export const logs = pgTable("logs", {
 // === BASE SCHEMAS ===
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const loginSchema = z.object({
-  username: z.string().min(3, "Username must be at least 3 characters"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  phoneNumber: z.string(),
+  code: z.string().optional(),
+  password: z.string().optional(),
+  phoneCodeHash: z.string().optional(),
 });
 export const insertSessionSchema = createInsertSchema(sessions).omit({ id: true, createdAt: true, lastActive: true });
 export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true, createdAt: true, status: true, errorMessage: true });

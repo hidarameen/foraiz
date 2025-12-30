@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { api, errorSchemas } from "@shared/routes";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
+import { sendCode, signIn } from "./services/telegram";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -42,27 +43,41 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
-  // Stub Login Route (Simulated for now)
+  // Telegram Login Route
   app.post(api.sessions.login.path, async (req, res) => {
-    const { phoneNumber, code, password } = req.body;
+    const { phoneNumber, code, password, phoneCodeHash } = req.body;
     
-    // Simulation Logic
-    if (phoneNumber && !code) {
-      return res.json({ status: 'code_sent', phoneCodeHash: 'mock_hash_123' });
-    }
-    
-    if (code === '12345') {
-       // Mock successful login
-       const session = await storage.createSession({
-         sessionName: `Account ${phoneNumber}`,
-         phoneNumber: phoneNumber,
-         sessionString: "mock_session_string_valid",
-         isActive: true
-       });
-       return res.json({ status: 'logged_in', sessionString: session.sessionString });
-    }
+    try {
+      if (phoneNumber && !code) {
+        const hash = await sendCode(phoneNumber);
+        return res.json({ status: 'code_sent', phoneCodeHash: hash });
+      }
+      
+      if (phoneNumber && code && phoneCodeHash) {
+        try {
+          const sessionString = await signIn(phoneNumber, phoneCodeHash, code, password);
+          
+          const session = await storage.createSession({
+            sessionName: `Account ${phoneNumber}`,
+            phoneNumber: phoneNumber,
+            sessionString: sessionString,
+            isActive: true
+          });
+          
+          return res.json({ status: 'logged_in', sessionString: session.sessionString });
+        } catch (err: any) {
+          if (err.message === "PASSWORD_REQUIRED") {
+            return res.json({ status: 'password_required' });
+          }
+          throw err;
+        }
+      }
 
-    return res.status(400).json({ message: "Invalid code (Try 12345)" });
+      return res.status(400).json({ message: "Missing required fields" });
+    } catch (err: any) {
+      console.error("Telegram Login Error:", err);
+      res.status(500).json({ message: err.message || "Internal server error" });
+    }
   });
 
   // === TASKS ===
