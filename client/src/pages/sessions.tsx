@@ -104,13 +104,20 @@ function AddSessionDialog() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    login.mutate(data, {
+    
+    // When moving from code to password, ensure we send the code along with password
+    const loginData = step === 'password' 
+      ? { phoneNumber: data.phoneNumber, code: data.code, password: data.password, phoneCodeHash: data.phoneCodeHash }
+      : data;
+    
+    login.mutate(loginData, {
       onSuccess: (res) => {
         if (res.status === 'code_sent') {
           setData(prev => ({ ...prev, phoneCodeHash: res.phoneCodeHash || "" }));
           setStep("code");
           toast({ title: "تم إرسال الرمز", description: "يرجى التحقق من تطبيق تيليجرام الخاص بك." });
         } else if (res.status === 'password_required') {
+          // Keep the code and phoneCodeHash, move to password step
           setStep("password");
           toast({ title: "مطلوب التحقق بخطوتين", description: "يرجى إدخال كلمة مرور الحساب." });
         } else if (res.status === 'logged_in') {

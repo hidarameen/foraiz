@@ -155,7 +155,7 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
 
   try {
     // Determine which authentication method to use
-    if (entry.phoneCodeVerified && password && entry.authMethod !== "start") {
+    if (entry.phoneCodeVerified && password && entry.authMethod === "start") {
       // This is a second call with password after PASSWORD_REQUIRED response
       // We should NOT call client.start() again, instead use signInWithPassword
       log("INFO", phoneNumber, "Phone code already verified in previous request, using password verification");
@@ -263,10 +263,11 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
 
     if (err.message === "PASSWORD_REQUIRED") {
       log("INFO", phoneNumber, "Password verification required, keeping client alive for next attempt");
+      // Keep the pending login entry for password retry - do NOT throw, re-throw the error
       throw err;
     }
 
-    if (err.message.includes("PHONE_CODE_INVALID")) {
+    if (err.message.includes("PHONE_CODE_INVALID") || err.message === "INVALID_CODE") {
       log("ERROR", phoneNumber, "Invalid phone code provided");
       await client.disconnect().catch(() => {});
       pendingLogins.delete(phoneNumber);
@@ -287,7 +288,7 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
       throw new Error("RATE_LIMITED");
     }
 
-    if (err.message && (err.message.includes("PASSWORD_INVALID") || err.message.includes("PASSWORD"))) {
+    if (err.message === "INVALID_PASSWORD" || err.message.includes("PASSWORD_INVALID")) {
       log("ERROR", phoneNumber, "Invalid password provided for 2FA");
       await client.disconnect().catch(() => {});
       pendingLogins.delete(phoneNumber);
@@ -295,6 +296,7 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
     }
 
     // For any other error, disconnect and clean up
+    log("ERROR", phoneNumber, "Unknown error during sign in", { error: err.message });
     await client.disconnect().catch(() => {});
     pendingLogins.delete(phoneNumber);
     throw err;
