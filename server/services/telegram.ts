@@ -79,23 +79,22 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
     throw new Error("SESSION_EXPIRED_OR_NOT_FOUND");
   }
 
-  const { client, phoneCodeHash } = entry;
+  const { client } = entry;
 
   try {
-    if (password && entry.isVerifyingPassword) {
-      // Step 2: 2FA Password
-      await client.invoke(new Api.auth.CheckPassword({
-        password: await (client as any)._createSrpHash(await client.invoke(new Api.account.GetPassword()), password)
-      } as any));
-    } else {
-      // Step 1: Code
-      try {
-        await client.invoke(new Api.auth.SignIn({
-          phoneNumber,
-          phoneCodeHash,
-          phoneCode: code,
-        }));
-      } catch (err: any) {
+    // Use client.start() as it's the most reliable way to handle the full flow including SRP for 2FA
+    await client.start({
+      phoneNumber: async () => phoneNumber,
+      phoneCode: async () => code,
+      password: async () => {
+        if (!password) {
+          entry.isVerifyingPassword = true;
+          entry.phoneCode = code;
+          throw new Error("PASSWORD_REQUIRED");
+        }
+        return password;
+      },
+      onError: (err: any) => {
         if (err.message.includes("SESSION_PASSWORD_NEEDED")) {
           entry.isVerifyingPassword = true;
           entry.phoneCode = code;
@@ -103,9 +102,11 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
         }
         throw err;
       }
-    }
+    });
 
     const sessionString = (client.session as StringSession).save();
+    // After successful sign in, we don't disconnect if we want to use it, 
+    // but for the sake of the session manager, we'll save it and close the current temp client
     await client.disconnect().catch(() => {});
     pendingLogins.delete(phoneNumber);
     return sessionString;
