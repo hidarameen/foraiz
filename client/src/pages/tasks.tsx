@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useTasks, useToggleTask, useDeleteTask, useCreateTask, useUpdateTask } from "@/hooks/use-tasks";
 import { useSessions } from "@/hooks/use-sessions";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,12 +10,13 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Edit2, Trash2, Play, Pause, ArrowLeft, Settings, Loader2, Upload, Download } from "lucide-react";
+import { Plus, Edit2, Trash2, Play, Pause, ArrowLeft, Settings, Loader2, Upload, Download, Filter, Settings2, FileText, Image as ImageIcon, Video, Music, Mic, Ghost, MessageSquare, HelpCircle, User, MapPin, ReceiptText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertTaskSchema, type Task } from "@shared/schema";
 import { z } from "zod";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function TasksPage() {
   const { data: tasks, isLoading } = useTasks();
@@ -56,7 +57,6 @@ export default function TasksPage() {
     reader.onload = async (e) => {
       try {
         const importedTask = JSON.parse(e.target?.result as string);
-        // Remove IDs and timestamps to create as new
         const { id, createdAt, status, errorMessage, ...taskToCreate } = importedTask;
         
         await createTaskMutation.mutateAsync(taskToCreate);
@@ -73,20 +73,25 @@ export default function TasksPage() {
       }
     };
     reader.readAsText(file);
-    // Reset input
     event.target.value = "";
   };
 
   if (isLoading) return <div className="flex items-center justify-center h-full py-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-3xl font-bold tracking-tight">بروتوكولات المهام</h1>
-          <p className="text-muted-foreground">إدارة عمليات تحويل الرسائل التلقائية وفلاترها.</p>
+    <div className="space-y-8 p-6 max-w-7xl mx-auto">
+      <motion.div 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col md:flex-row md:items-center justify-between gap-6"
+      >
+        <div className="flex flex-col gap-2">
+          <h1 className="text-4xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/60">
+            إدارة بروتوكولات المهام
+          </h1>
+          <p className="text-muted-foreground text-lg text-right">تحكم كامل في عمليات الأتمتة والتحويل الذكي.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-3">
           <label className="cursor-pointer">
             <input 
               type="file" 
@@ -94,96 +99,116 @@ export default function TasksPage() {
               accept=".json"
               onChange={importTask}
             />
-            <Button variant="outline" className="gap-2 h-11 px-6 rounded-lg">
-              <Download className="w-4 h-4" /> استيراد مهمة
+            <Button variant="outline" size="lg" className="gap-2 rounded-xl border-primary/20 hover:border-primary/50 transition-all hover:bg-primary/5 h-12">
+              <Download className="w-5 h-5" /> استيراد مهمة
             </Button>
           </label>
           <TaskFormDialog />
         </div>
-      </div>
+      </motion.div>
 
-      <div className="grid gap-6">
-        {tasks?.map((task) => (
-          <Card key={task.id} className="hover-elevate transition-all border-s-4 border-s-primary">
-            <CardContent className="py-6">
-              <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                
-                <div className="flex items-center gap-4 flex-1">
-                  <div className={`p-4 rounded-xl border ${task.isActive ? 'bg-primary/10 border-primary/20 text-primary shadow-lg shadow-primary/10' : 'bg-muted border-muted-foreground/10 text-muted-foreground'}`}>
-                    {task.isActive ? <Play className="w-6 h-6 fill-current" /> : <Pause className="w-6 h-6" />}
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold">{task.name}</h3>
-                    <div className="flex items-center gap-3 text-sm font-medium text-muted-foreground mt-1">
-                      <span className="text-primary bg-primary/10 px-2 py-0.5 rounded-full">{task.sourceChannels.length} مصادر</span>
-                      <ArrowLeft className="w-3 h-3" />
-                      <span className="text-secondary bg-secondary/10 px-2 py-0.5 rounded-full">{task.destinationChannels.length} أهداف</span>
+      <div className="grid gap-8">
+        <AnimatePresence mode="popLayout">
+          {tasks?.map((task, index) => (
+            <motion.div
+              key={task.id}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ delay: index * 0.05 }}
+            >
+              <Card className="overflow-hidden border-none shadow-xl bg-card/50 backdrop-blur-md hover:bg-card/80 transition-all duration-300 group ring-1 ring-white/10">
+                <div className="absolute top-0 right-0 w-1.5 h-full bg-primary/40 group-hover:bg-primary transition-colors" />
+                <CardContent className="p-8">
+                  <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
+                    
+                    <div className="flex items-center gap-6 flex-1">
+                      <div className={`p-5 rounded-2xl border-2 transition-all duration-500 ${task.isActive ? 'bg-primary/20 border-primary/30 text-primary shadow-2xl shadow-primary/20 scale-105' : 'bg-muted/50 border-muted-foreground/10 text-muted-foreground'}`}>
+                        {task.isActive ? <Play className="w-8 h-8 fill-current animate-pulse" /> : <Pause className="w-8 h-8" />}
+                      </div>
+                      <div className="space-y-2 text-right">
+                        <div className="flex items-center gap-3 justify-start md:justify-end flex-row-reverse">
+                          <h3 className="text-2xl font-bold tracking-tight">{task.name}</h3>
+                          <div className={`px-3 py-1 rounded-full text-xs font-bold ${task.status === "running" ? "bg-primary/20 text-primary" : "bg-secondary/20 text-secondary"}`}>
+                            {task.status === "running" ? "نشط الآن" : "خامل"}
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-4 text-sm font-medium justify-start md:justify-end flex-row-reverse">
+                          <div className="flex items-center gap-2 bg-primary/10 text-primary px-3 py-1 rounded-lg">
+                            <span className="font-bold">{task.sourceChannels.length}</span> مصادر
+                          </div>
+                          <ArrowLeft className="w-4 h-4 text-muted-foreground/50 rotate-180" />
+                          <div className="flex items-center gap-2 bg-secondary/10 text-secondary px-3 py-1 rounded-lg">
+                            <span className="font-bold">{task.destinationChannels.length}</span> أهداف
+                          </div>
+                          <span className="text-muted-foreground/60 font-mono text-xs">ID: #{task.id.toString().padStart(4, '0')}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-8 w-full lg:w-auto justify-between lg:justify-end border-t lg:border-t-0 pt-6 lg:pt-0 flex-row-reverse">
+                      <div className="flex flex-col items-center lg:items-start gap-2">
+                        <span className="text-xs uppercase tracking-widest text-muted-foreground font-bold opacity-60">الحالة التشغيلية</span>
+                        <Switch 
+                          checked={task.isActive || false}
+                          onCheckedChange={() => handleToggle(task.id, task.isActive || false)}
+                          className="data-[state=checked]:bg-primary"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <Button 
+                          variant="secondary" 
+                          size="icon" 
+                          className="rounded-xl hover:bg-primary/20 hover:text-primary transition-all shadow-sm h-10 w-10"
+                          onClick={() => exportTask(task)}
+                          title="تصدير"
+                        >
+                          <Upload className="w-5 h-5" />
+                        </Button>
+                        <TaskFormDialog task={task} trigger={
+                          <Button variant="secondary" size="icon" className="rounded-xl hover:bg-primary/20 hover:text-primary transition-all shadow-sm h-10 w-10">
+                            <Edit2 className="w-5 h-5" />
+                          </Button>
+                        } />
+                        <Button 
+                          variant="secondary" 
+                          size="icon" 
+                          className="rounded-xl hover:bg-destructive/20 hover:text-destructive transition-all shadow-sm h-10 w-10"
+                          onClick={() => handleDelete(task.id)}
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                </div>
-
-                <div className="flex items-center gap-6">
-                  <div className="flex flex-col items-start md:items-end gap-1 font-mono text-xs">
-                    <span className="text-muted-foreground">ID: #{task.id.toString().padStart(4, '0')}</span>
-                    <span className={`px-3 py-1 rounded-full font-bold ${task.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'}`}>
-                      {task.isActive ? 'قيد التشغيل' : 'متوقف'}
-                    </span>
-                  </div>
-
-                  <Switch 
-                    checked={task.isActive || false}
-                    onCheckedChange={() => handleToggle(task.id, task.isActive || false)}
-                    className="h-7 w-12"
-                  />
-
-                  <div className="flex items-center gap-2 pr-6 border-r">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="hover:bg-primary/10 hover:text-primary rounded-lg h-9 w-9"
-                      onClick={() => exportTask(task)}
-                      title="تصدير كملف منفصل"
-                    >
-                      <Upload className="w-4 h-4" />
-                    </Button>
-                    <TaskFormDialog task={task} trigger={
-                      <Button variant="ghost" size="icon" className="hover:bg-primary/10 hover:text-primary rounded-lg h-9 w-9">
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                    } />
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="hover:bg-destructive/10 hover:text-destructive rounded-lg h-9 w-9"
-                      onClick={() => handleDelete(task.id)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))}
+        </AnimatePresence>
         
         {tasks?.length === 0 && (
-          <div className="py-20 flex flex-col items-center justify-center text-center space-y-4 border-2 border-dashed rounded-2xl bg-muted/30">
-            <div className="p-4 bg-muted rounded-full">
-              <Settings className="w-12 h-12 text-muted-foreground opacity-50" />
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="py-32 flex flex-col items-center justify-center text-center space-y-6 border-4 border-dashed rounded-3xl bg-muted/20 border-muted/50"
+          >
+            <div className="p-8 bg-muted/50 rounded-full shadow-inner">
+              <Settings2 className="w-20 h-20 text-muted-foreground opacity-30" />
             </div>
-            <div className="space-y-1">
-              <p className="text-xl font-semibold">لا توجد بروتوكولات مهام</p>
-              <p className="text-sm text-muted-foreground">أنشئ مهمة جديدة للبدء في عمليات الأتمتة.</p>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold">لا توجد مهام مهيأة</h2>
+              <p className="text-muted-foreground text-lg max-w-md mx-auto">ابدأ رحلة الأتمتة الخاصة بك بإنشاء أول بروتوكول توجيه متطور.</p>
             </div>
             <TaskFormDialog />
-          </div>
+          </motion.div>
         )}
       </div>
     </div>
   );
 }
 
-// Form Component
 const formSchema = insertTaskSchema.extend({
   sourceChannels: z.string().transform(str => str.split(',').map(s => s.trim())),
   destinationChannels: z.string().transform(str => str.split(',').map(s => s.trim())),
@@ -203,13 +228,20 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
       sessionId: task?.sessionId || (sessions?.[0]?.id || 0),
       sourceChannels: task?.sourceChannels?.join(", ") || "",
       destinationChannels: task?.destinationChannels?.join(", ") || "",
-      filters: task?.filters || { keywords: [], excludeKeywords: [], mediaTypes: [] },
+      filters: task?.filters || { 
+        keywords: [], 
+        excludeKeywords: [], 
+        mediaTypes: {
+          text: true, photo: true, video: true, document: true, audio: true, 
+          voice: true, sticker: true, videoNote: true, animation: true,
+          poll: true, contact: true, location: true, invoice: true
+        } 
+      },
       options: task?.options || { withCaption: true, dropAuthor: false },
     }
   });
 
   const onSubmit = (data: any) => {
-    console.log("📝 FORM SUBMIT: Raw form data", { data, formErrors: form.formState.errors });
     const payload = {
       ...data,
       filters: {
@@ -219,73 +251,72 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
       }
     };
 
-    console.log("🎯 FORM SUBMIT: Final payload", { payload });
-
     if (task) {
-      console.log("✏️ FORM SUBMIT: Updating task", { taskId: task.id });
       update.mutate({ id: task.id, ...payload }, {
-        onSuccess: () => { 
-          console.log("✅ UPDATE SUCCESS");
-          setOpen(false); 
-          toast({ title: "تم تحديث المهمة" }); 
-        },
-        onError: (error) => {
-          console.error("❌ UPDATE ERROR", { error: (error as Error).message });
-          toast({ title: "خطأ", description: (error as Error).message, variant: "destructive" });
-        }
+        onSuccess: () => { setOpen(false); toast({ title: "تم التحديث بنجاح" }); },
+        onError: (error) => toast({ title: "خطأ", description: (error as Error).message, variant: "destructive" })
       });
     } else {
-      console.log("✏️ FORM SUBMIT: Creating new task");
       create.mutate(payload, {
-        onSuccess: () => { 
-          console.log("✅ CREATE SUCCESS");
-          setOpen(false); 
-          toast({ title: "تم إنشاء المهمة" }); 
-        },
-        onError: (error) => {
-          console.error("❌ CREATE ERROR", { error: (error as Error).message });
-          toast({ title: "خطأ", description: (error as Error).message, variant: "destructive" });
-        }
+        onSuccess: () => { setOpen(false); toast({ title: "تم الإنشاء بنجاح" }); },
+        onError: (error) => toast({ title: "خطأ", description: (error as Error).message, variant: "destructive" })
       });
     }
   };
+
+  const mediaTypes = [
+    { key: "text", label: "رسائل نصية", icon: MessageSquare },
+    { key: "photo", label: "صور", icon: ImageIcon },
+    { key: "video", label: "فيديوهات", icon: Video },
+    { key: "document", label: "ملفات", icon: FileText },
+    { key: "audio", label: "موسيقى", icon: Music },
+    { key: "voice", label: "رسائل صوتية", icon: Mic },
+    { key: "sticker", label: "ملصقات", icon: Ghost },
+    { key: "videoNote", label: "رسائل فيديو", icon: Video },
+    { key: "animation", label: "صور متحركة", icon: ImageIcon },
+    { key: "poll", label: "استطلاعات", icon: HelpCircle },
+    { key: "contact", label: "جهات اتصال", icon: User },
+    { key: "location", label: "مواقع", icon: MapPin },
+    { key: "invoice", label: "فواتير", icon: ReceiptText },
+  ];
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger || (
-          <Button className="gap-2 h-11 px-6 rounded-lg shadow-lg shadow-primary/20">
-            <Plus className="w-4 h-4" /> بروتوكول جديد
+          <Button size="lg" className="gap-2 rounded-xl shadow-2xl shadow-primary/30 h-12 px-8 font-bold text-lg">
+            <Plus className="w-5 h-5" /> بروتوكول جديد
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto p-6">
-        <DialogHeader className="mb-4">
-          <DialogTitle className="text-2xl font-bold text-center lg:text-right">
-            {task ? 'تعديل بروتوكول المهمة' : 'إنشاء بروتوكول مهمة جديد'}
+      <DialogContent className="sm:max-w-3xl max-h-[95vh] overflow-y-auto p-0 border-none rounded-3xl overflow-hidden shadow-3xl bg-card">
+        <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-8 border-b border-primary/10 text-right">
+          <DialogTitle className="text-3xl font-black tracking-tighter">
+            {task ? 'تعديل البروتوكول' : 'تخصيص بروتوكول جديد'}
           </DialogTitle>
-        </DialogHeader>
+          <p className="text-muted-foreground mt-2">قم بضبط قواعد الأتمتة وفلاتر الوسائط بدقة.</p>
+        </div>
 
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2 col-span-full">
-              <Label>اسم البروتوكول</Label>
-              <Input {...form.register("name")} className="h-11" placeholder="مثال: تحويل قناة الأخبار الرئيسية" />
+        <form onSubmit={form.handleSubmit(onSubmit)} className="p-8 space-y-10">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-right">
+            <div className="space-y-3 col-span-full">
+              <Label className="text-sm font-bold uppercase tracking-widest text-primary/70">اسم البروتوكول</Label>
+              <Input {...form.register("name")} className="h-14 rounded-2xl bg-muted/30 border-muted-foreground/10 focus:bg-background transition-all text-lg text-right" placeholder="مثال: فلترة الأخبار العاجلة" />
             </div>
 
-            <div className="space-y-2 col-span-full">
-              <Label>حساب الربط (Node)</Label>
+            <div className="space-y-3 col-span-full">
+              <Label className="text-sm font-bold uppercase tracking-widest text-primary/70">العقدة المرتبطة (Node)</Label>
               <Controller
                 control={form.control}
                 name="sessionId"
                 render={({ field }) => (
                   <Select onValueChange={(val) => field.onChange(parseInt(val))} value={field.value?.toString()}>
-                    <SelectTrigger className="h-11">
+                    <SelectTrigger className="h-14 rounded-2xl bg-muted/30 border-muted-foreground/10 flex-row-reverse">
                       <SelectValue placeholder="اختر جلسة الربط" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="rounded-2xl border-primary/10 text-right">
                       {sessions?.map(s => (
-                        <SelectItem key={s.id} value={s.id.toString()}>{s.sessionName} ({s.phoneNumber})</SelectItem>
+                        <SelectItem key={s.id} value={s.id.toString()} className="rounded-xl my-1 flex-row-reverse">{s.sessionName} ({s.phoneNumber})</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -293,22 +324,73 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
               />
             </div>
 
-            <div className="space-y-2">
-              <Label>القنوات المصدر (IDs أو Usernames)</Label>
-              <Input {...form.register("sourceChannels")} className="h-11 font-mono text-sm" placeholder="@channel1, -100123456" />
-              <p className="text-[10px] text-muted-foreground">افصل بين القنوات بفاصلة (,)</p>
+            <div className="space-y-3">
+              <Label className="text-sm font-bold uppercase tracking-widest text-primary/70">القنوات المصدر</Label>
+              <Input {...form.register("sourceChannels")} className="h-14 rounded-2xl bg-muted/30 border-muted-foreground/10 font-mono text-sm text-right" placeholder="@source1, @source2" />
             </div>
 
-            <div className="space-y-2">
-              <Label>القنوات المستهدفة (IDs أو Usernames)</Label>
-              <Input {...form.register("destinationChannels")} className="h-11 font-mono text-sm" placeholder="@my_archive" />
-              <p className="text-[10px] text-muted-foreground">القنوات التي سيتم تحويل الرسائل إليها.</p>
+            <div className="space-y-3">
+              <Label className="text-sm font-bold uppercase tracking-widest text-primary/70">القنوات المستهدفة</Label>
+              <Input {...form.register("destinationChannels")} className="h-14 rounded-2xl bg-muted/30 border-muted-foreground/10 font-mono text-sm text-right" placeholder="@target_channel" />
             </div>
           </div>
 
-          <Button type="submit" disabled={create.isPending || update.isPending} className="w-full h-12 font-bold text-lg rounded-lg shadow-lg shadow-primary/20">
-            {(create.isPending || update.isPending) && <Loader2 className="w-5 h-5 animate-spin me-2" />}
-            حفظ بروتوكول المهمة
+          <Accordion type="multiple" className="w-full space-y-4 text-right">
+            <AccordionItem value="media-filters" className="border rounded-3xl bg-muted/20 px-6 overflow-hidden border-primary/5 shadow-inner">
+              <AccordionTrigger className="hover:no-underline py-6 font-black text-xl text-primary flex gap-3 flex-row-reverse">
+                <div className="p-2 bg-primary/10 rounded-xl"><Filter className="w-5 h-5" /></div>
+                فلاتر الوسائط الشاملة
+              </AccordionTrigger>
+              <AccordionContent className="pb-8 pt-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {mediaTypes.map((type) => (
+                    <div key={type.key} className="flex items-center justify-between p-4 rounded-2xl bg-background/50 border border-primary/5 hover:border-primary/20 transition-all group flex-row-reverse">
+                      <div className="flex items-center gap-3 flex-row-reverse">
+                        <div className="p-2 bg-muted rounded-lg group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                          <type.icon className="w-4 h-4" />
+                        </div>
+                        <span className="text-sm font-bold">{type.label}</span>
+                      </div>
+                      <Controller
+                        control={form.control}
+                        name={`filters.mediaTypes.${type.key}`}
+                        render={({ field }) => (
+                          <Switch 
+                            checked={field.value} 
+                            onCheckedChange={field.onChange}
+                            className="scale-75 data-[state=checked]:bg-primary" 
+                          />
+                        )}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value="content-filters" className="border rounded-3xl bg-muted/20 px-6 overflow-hidden border-primary/5 shadow-inner">
+              <AccordionTrigger className="hover:no-underline py-6 font-black text-xl text-primary flex gap-3 flex-row-reverse">
+                <div className="p-2 bg-primary/10 rounded-xl"><Settings className="w-5 h-5" /></div>
+                تخصيص المحتوى والكلمات
+              </AccordionTrigger>
+              <AccordionContent className="pb-8 pt-4 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <Label className="text-xs font-black uppercase text-muted-foreground tracking-widest">الكلمات المطلوبة</Label>
+                    <Input placeholder="عاجل، حصري، مباشر" className="rounded-xl h-12 bg-background/50 text-right" {...form.register("filters.keywords")} />
+                  </div>
+                  <div className="space-y-3">
+                    <Label className="text-xs font-black uppercase text-muted-foreground tracking-widest">الكلمات المستبعدة</Label>
+                    <Input placeholder="إعلان، ممول، ترويجي" className="rounded-xl h-12 bg-background/50 text-right" {...form.register("filters.excludeKeywords")} />
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+
+          <Button type="submit" disabled={create.isPending || update.isPending} className="w-full h-16 font-black text-xl rounded-2xl shadow-2xl shadow-primary/40 transition-all hover:scale-[1.01] active:scale-[0.99]">
+            {create.isPending || update.isPending ? <Loader2 className="w-6 h-6 animate-spin me-2" /> : <Settings2 className="w-6 h-6 me-2" />}
+            تثبيت البروتوكول والتشغيل
           </Button>
         </form>
       </DialogContent>
