@@ -394,6 +394,15 @@ export async function registerRoutes(
         taskId: task.id,
         taskName: task.name,
       });
+
+      // تفعيل المستمع للجلسة عند إنشاء مهمة نشطة جديدة
+      if (task.isActive) {
+        const { startMessageListener } = await import("./services/telegram");
+        await startMessageListener(task.sessionId).catch(err => 
+          console.error(`[Routes] Failed to start listener for session ${task.sessionId}:`, err)
+        );
+      }
+
       res.status(201).json({
         ...task,
         filters: cleanAIFilters(task.filters)
@@ -450,6 +459,15 @@ export async function registerRoutes(
         logRequest("WARN", api.tasks.update.path, `Task ${taskId} not found`);
         return res.status(404).json({ message: 'Task not found' });
       }
+
+      // تحديث المستمعين عند تعديل المهمة
+      if (task.isActive) {
+        const { startMessageListener } = await import("./services/telegram");
+        await startMessageListener(task.sessionId).catch(err => 
+          console.error(`[Routes] Failed to restart listener for session ${task.sessionId}:`, err)
+        );
+      }
+
       logRequest("SUCCESS", api.tasks.update.path, `Task ${taskId} updated successfully`);
       res.json({
         ...task,
@@ -477,9 +495,22 @@ export async function registerRoutes(
     const taskId = Number(req.params.id);
     logRequest("INFO", api.tasks.delete.path, `Deleting task ${taskId}`);
     try {
+      const task = await storage.getTask(taskId);
+      
       // Delete associated logs first to avoid foreign key constraint violation
       await storage.deleteLogsByTaskId(taskId);
       await storage.deleteTask(taskId);
+
+      // إذا كانت هذه هي المهمة النشطة الوحيدة، نوقف المستمع
+      if (task) {
+        const allTasks = await storage.getTasks();
+        const otherActiveTasks = allTasks.filter(t => t.sessionId === task.sessionId && t.isActive);
+        if (otherActiveTasks.length === 0) {
+          const { stopMessageListener } = await import("./services/telegram");
+          await stopMessageListener(task.sessionId);
+        }
+      }
+
       logRequest("SUCCESS", api.tasks.delete.path, `Task ${taskId} deleted successfully`);
       res.status(204).send();
     } catch (err: any) {
@@ -498,6 +529,22 @@ export async function registerRoutes(
         logRequest("WARN", api.tasks.toggle.path, `Task ${taskId} not found`);
         return res.status(404).json({ message: 'Task not found' });
       }
+
+      // تفعيل/إيقاف المستمع بناءً على الحالة الجديدة
+      const { startMessageListener, stopMessageListener } = await import("./services/telegram");
+      if (isActive) {
+        await startMessageListener(task.sessionId).catch(err => 
+          console.error(`[Routes] Failed to start listener for session ${task.sessionId}:`, err)
+        );
+      } else {
+        // نتحقق أولاً إذا كانت هناك مهام نشطة أخرى قبل إيقاف المستمع تماماً
+        const allTasks = await storage.getTasks();
+        const otherActiveTasks = allTasks.filter(t => t.sessionId === task.sessionId && t.isActive && t.id !== taskId);
+        if (otherActiveTasks.length === 0) {
+          await stopMessageListener(task.sessionId);
+        }
+      }
+
       logRequest("SUCCESS", api.tasks.toggle.path, `Task ${taskId} toggled to ${isActive}`, { task });
       res.json(task);
     } catch (err: any) {

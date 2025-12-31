@@ -371,8 +371,28 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
 // Message forwarding listener setup
 const messageListeners = new Map<number, boolean>();
 
+export async function stopMessageListener(sessionId: number) {
+  if (!messageListeners.has(sessionId)) return;
+  
+  console.log(`[Listener] 🛑 Stopping message listener for session ${sessionId}`);
+  messageListeners.delete(sessionId);
+  
+  const client = activeClients.get(sessionId);
+  if (client) {
+    // Note: GramJS doesn't have a simple way to remove all event handlers
+    // but our handler checks messageListeners.has(sessionId) or isActive tasks
+    // To truly stop it, we can disconnect if no other tasks need it
+    // For now, removing from map is enough as our logic will skip it
+  }
+}
+
 export async function startMessageListener(sessionId: number) {
-  if (messageListeners.has(sessionId)) return;
+  // If already listening, we might need to refresh state (re-read tasks)
+  // but the current implementation already reads tasks from storage inside the handler
+  if (messageListeners.has(sessionId)) {
+    console.log(`[Listener] Listener already active for session ${sessionId}, will pick up task changes automatically.`);
+    return;
+  }
   messageListeners.set(sessionId, true);
 
   try {
