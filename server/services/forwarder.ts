@@ -342,8 +342,14 @@ ${rulesDescription}
           const apiKey = activeConfig?.apiKey || process.env[`${aiFilters.provider.toUpperCase()}_API_KEY`];
 
           if (apiKey) {
-            console.log(`[Forwarder] Using AI Provider: ${aiFilters.provider}, Model: ${aiFilters.model}`);
+            console.log(`[Forwarder] AI Request Start - Provider: ${aiFilters.provider}, Model: ${aiFilters.model}`);
+            console.log(`[Forwarder] AI Prompt sent:\n${prompt}`);
+            
+            const startTime = Date.now();
             const response = await AIService.chat(aiFilters.provider, aiFilters.model, prompt, apiKey);
+            const duration = Date.now() - startTime;
+            
+            console.log(`[Forwarder] AI Response received in ${duration}ms:`, JSON.stringify(response, null, 2));
             
             // Handle different response structures from providers
             let decision = "";
@@ -353,19 +359,23 @@ ${rulesDescription}
               decision = (response as any).message?.toUpperCase() || JSON.stringify(response).toUpperCase();
             }
             
-            console.log(`[Forwarder] AI Raw Response:`, response);
-            console.log(`[Forwarder] AI Decision String: ${decision}`);
+            console.log(`[Forwarder] AI Normalized Decision: ${decision}`);
             
             // Normalize decision string
             const upperDecision = decision.split('|')[0].trim().toUpperCase();
             
             if (upperDecision.includes("BLOCK")) {
-              return { allowed: false, reason: `حظر بواسطة الذكاء الاصطناعي: ${decision.split('|')[1]?.trim() || "محتوى غير مرغوب فيه"}` };
+              const reason = decision.split('|')[1]?.trim() || "محتوى غير مرغوب فيه";
+              console.log(`[Forwarder] AI Decision: BLOCK, Reason: ${reason}`);
+              return { allowed: false, reason: `حظر بواسطة الذكاء الاصطناعي: ${reason}` };
             }
             
             if (aiFilters.mode === 'whitelist' && !upperDecision.includes("ALLOW")) {
+              console.log(`[Forwarder] AI Decision: BLOCK (Whitelist failure)`);
               return { allowed: false, reason: "حظر بواسطة الذكاء الاصطناعي: لم يطابق قواعد السماح (Whitelist)" };
             }
+            
+            console.log(`[Forwarder] AI Decision: ALLOW`);
           } else {
             console.error(`[Forwarder] AI Filter enabled but no active API key found for ${aiFilters.provider} in database or environment`);
             // Fallback: If AI is mandatory but fails due to config, we might want to log it
