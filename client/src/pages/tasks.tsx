@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTasks, useToggleTask, useDeleteTask, useCreateTask, useUpdateTask } from "@/hooks/use-tasks";
 import { useSessions } from "@/hooks/use-sessions";
@@ -273,6 +273,12 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
   const [editingRuleIndex, setEditingRuleIndex] = useState<number | null>(null);
   const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
   const [tempRule, setTempRule] = useState<any>({ name: "", instruction: "", isActive: true });
+
+  useEffect(() => {
+    setRuleDialogOpen(false);
+    setEditingRuleIndex(null);
+    setTempRule({ name: "", instruction: "", isActive: true });
+  }, [currentMode]);
 
   const handleAddRule = () => {
     setEditingRuleIndex(null);
