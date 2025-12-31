@@ -48,10 +48,13 @@ export class MessageForwarder {
       console.error(`[Forwarder] Task ${task.id} not found in database!`);
     }
     const filters = (taskData?.filters || task.filters) as any;
-    const aiRules = filters?.aiFilters?.rules;
-    console.log(`[Forwarder] Processing message ${messageId} for task ${task.id}. AI Rules count: ${aiRules?.length || 0}`);
-    if (aiRules && aiRules.length > 0) {
-      console.log(`[Forwarder] Active Rule 1 Instruction: "${aiRules[0].instruction}"`);
+    const aiFiltersConfig = filters?.aiFilters;
+    const rulesForMode = aiFiltersConfig?.mode === 'whitelist' 
+      ? (aiFiltersConfig?.whitelistRules || [])
+      : (aiFiltersConfig?.blacklistRules || []);
+    console.log(`[Forwarder] Processing message ${messageId} for task ${task.id}. AI Rules count (${aiFiltersConfig?.mode}): ${rulesForMode.length || 0}`);
+    if (rulesForMode && rulesForMode.length > 0) {
+      console.log(`[Forwarder] Active Rule 1 Instruction: "${rulesForMode[0].instruction}"`);
     }
     const filterResult = await this.applyFilters(content, filters, metadata);
     
@@ -317,14 +320,19 @@ export class MessageForwarder {
 
     // 2. فلاتر الذكاء الاصطناعي
     const aiFilters = filters?.aiFilters;
-    if (aiFilters?.isEnabled && aiFilters.rules?.length > 0) {
-      const activeRules = aiFilters.rules
-        .filter((r: any) => r.isActive)
-        .sort((a: any, b: any) => (a.priority || 0) - (b.priority || 0));
+    if (aiFilters?.isEnabled) {
+      const rulesArray = aiFilters.mode === 'whitelist' 
+        ? (aiFilters.whitelistRules || [])
+        : (aiFilters.blacklistRules || []);
+      
+      if (rulesArray.length > 0) {
+        const activeRules = rulesArray
+          .filter((r: any) => r.isActive)
+          .sort((a: any, b: any) => (a.priority || 0) - (b.priority || 0));
 
-      const textToAnalyze = content || metadata?.originalText || "";
+        const textToAnalyze = content || metadata?.originalText || "";
 
-      if (activeRules.length > 0 && textToAnalyze.trim().length > 0) {
+        if (activeRules.length > 0 && textToAnalyze.trim().length > 0) {
         const rulesDescription = activeRules.map((r: any) => `- ${r.name}: ${r.instruction}`).join('\n');
         
         const prompt = `أنت خبير في تحليل المحتوى وفهم السياق، مهمتك هي تقييم الرسائل بناءً على القواعد المحددة.
@@ -354,7 +362,7 @@ ${rulesDescription}
           const apiKey = activeConfig?.apiKey || process.env[`${aiFilters.provider.toUpperCase()}_API_KEY`];
 
           if (apiKey) {
-            console.log(`[Forwarder] AI Request Start - Provider: ${aiFilters.provider}, Model: ${aiFilters.model}`);
+            console.log(`[Forwarder] AI Request Start - Provider: ${aiFilters.provider}, Model: ${aiFilters.model}, Mode: ${aiFilters.mode}`);
             console.log(`[Forwarder] AI Prompt sent:\n${prompt}`);
             
             const startTime = Date.now();
@@ -394,6 +402,7 @@ ${rulesDescription}
           }
         } catch (error) {
           console.error(`[Forwarder] AI Filtering failed:`, error);
+        }
         }
       }
     }

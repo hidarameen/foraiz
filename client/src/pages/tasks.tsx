@@ -250,7 +250,8 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
           provider: "openai",
           model: "gpt-4o-mini",
           mode: "blacklist",
-          rules: []
+          blacklistRules: [],
+          whitelistRules: []
         }
       },
       options: task?.options || { withCaption: true, dropAuthor: false },
@@ -262,9 +263,11 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
   const availableModels = aiConfig?.[selectedProvider]?.models || [];
   const activeProviders = aiSettings?.filter(s => s.isActive).map(s => s.provider) || [];
 
+  const currentMode = form.watch("filters.aiFilters.mode");
+  const rulesFieldName = currentMode === 'whitelist' ? "filters.aiFilters.whitelistRules" : "filters.aiFilters.blacklistRules";
   const { fields, append, remove } = useFieldArray({
     control: form.control,
-    name: "filters.aiFilters.rules"
+    name: rulesFieldName
   });
 
   const [editingRuleIndex, setEditingRuleIndex] = useState<number | null>(null);
@@ -293,9 +296,11 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
   };
 
   const updateRule = (index: number, value: any) => {
-    const rules = [...form.getValues("filters.aiFilters.rules")];
+    const mode = form.getValues("filters.aiFilters.mode");
+    const fieldName = mode === 'whitelist' ? "filters.aiFilters.whitelistRules" : "filters.aiFilters.blacklistRules";
+    const rules = [...form.getValues(fieldName)];
     rules[index] = value;
-    form.setValue("filters.aiFilters.rules", rules);
+    form.setValue(fieldName, rules);
   };
 
   const onSubmit = (data: any) => {
@@ -306,7 +311,12 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
         mediaTypes: data.filters.mediaTypes || DEFAULT_MEDIA_TYPES,
         aiFilters: {
           ...data.filters.aiFilters,
-          rules: data.filters.aiFilters.rules.map((r: any, idx: number) => ({
+          blacklistRules: (data.filters.aiFilters.blacklistRules || []).map((r: any, idx: number) => ({
+            ...r,
+            id: r.id || `rule_${Date.now()}_${idx}`,
+            priority: r.priority ?? idx
+          })),
+          whitelistRules: (data.filters.aiFilters.whitelistRules || []).map((r: any, idx: number) => ({
             ...r,
             id: r.id || `rule_${Date.now()}_${idx}`,
             priority: r.priority ?? idx
@@ -540,7 +550,9 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
 
                   <div className="space-y-4">
                     <div className="flex items-center justify-between flex-row-reverse">
-                      <Label className="text-lg font-bold flex items-center gap-2">قواعد التحليل <Sparkles className="w-4 h-4 text-blue-400" /></Label>
+                      <Label className="text-lg font-bold flex items-center gap-2">
+                        قواعد {currentMode === 'whitelist' ? 'القائمة البيضاء' : 'القائمة السوداء'} <Sparkles className="w-4 h-4 text-blue-400" />
+                      </Label>
                       <Dialog open={ruleDialogOpen} onOpenChange={setRuleDialogOpen}>
                         <DialogTrigger asChild>
                           <Button 
@@ -595,12 +607,14 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
                     </div>
 
                     <div className="space-y-4">
-                      {fields.map((field, index) => (
-                        <div key={field.id} className="p-4 bg-background rounded-2xl border border-blue-500/5 space-y-3 relative group hover:border-blue-500/20 transition-all">
+                      {fields.map((_, index) => {
+                        const rule = form.getValues(rulesFieldName)?.[index];
+                        return (
+                        <div key={index} className="p-4 bg-background rounded-2xl border border-blue-500/5 space-y-3 relative group hover:border-blue-500/20 transition-all">
                           <div className="flex items-center justify-between flex-row-reverse">
                             <div className="flex items-center gap-3 flex-row-reverse">
                               <span className="bg-blue-500/10 text-blue-500 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">{index + 1}</span>
-                              <span className="font-bold text-sm">{field.name || "قاعدة بدون اسم"}</span>
+                              <span className="font-bold text-sm">{rule?.name || "قاعدة بدون اسم"}</span>
                             </div>
                             <div className="flex items-center gap-2">
                               <Button
@@ -622,17 +636,18 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
                                 <Trash2 className="w-4 h-4" />
                               </Button>
                               <Switch 
-                                checked={field.isActive} 
-                                onCheckedChange={(checked) => updateRule(index, { ...field, isActive: checked })} 
+                                checked={rule?.isActive ?? true} 
+                                onCheckedChange={(checked) => updateRule(index, { ...rule, isActive: checked })} 
                                 className="scale-75 data-[state=checked]:bg-green-500 ml-2" 
                               />
                             </div>
                           </div>
                           <p className="text-xs text-muted-foreground line-clamp-2 text-right bg-muted/20 p-2 rounded-lg italic">
-                            {field.instruction || "لا توجد تعليمات مضافة لهذه القاعدة"}
+                            {rule?.instruction || "لا توجد تعليمات مضافة لهذه القاعدة"}
                           </p>
                         </div>
-                      ))}
+                      );
+                      })}
                       {fields.length === 0 && (
                         <div className="py-12 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center text-muted-foreground gap-2">
                           <AlertTriangle className="w-8 h-8 opacity-20" />

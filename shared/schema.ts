@@ -52,7 +52,14 @@ export const tasks = pgTable("tasks", {
       provider: string;
       model: string;
       mode: 'whitelist' | 'blacklist';
-      rules: {
+      blacklistRules: {
+        id: string;
+        name: string;
+        instruction: string; // The rule for the AI
+        isActive: boolean;
+        priority: number;
+      }[];
+      whitelistRules: {
         id: string;
         name: string;
         instruction: string; // The rule for the AI
@@ -82,7 +89,8 @@ export const tasks = pgTable("tasks", {
       provider: "openai",
       model: "gpt-4o-mini",
       mode: "blacklist",
-      rules: []
+      blacklistRules: [],
+      whitelistRules: []
     }
   }),
   
