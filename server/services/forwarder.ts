@@ -45,6 +45,9 @@ export class MessageForwarder {
     // التحقق من الفلاتر العامة للمهمة قبل البدء في التوجيه لكل وجهة
     const filters = task.filters as any;
     const filterResult = await this.applyFilters(content, filters, metadata);
+    
+    console.log(`[Forwarder] Filter analysis completed for message ${messageId}. Result: ${filterResult.allowed ? 'ALLOWED' : 'BLOCKED'}`);
+
     if (!filterResult.allowed) {
       console.log(`[Forwarder] Message ${messageId} skipped by filters for task "${task.name}": ${filterResult.reason}`);
       
