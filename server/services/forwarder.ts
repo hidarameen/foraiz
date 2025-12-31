@@ -43,7 +43,8 @@ export class MessageForwarder {
     console.log(`[Forwarder] Task "${task.name}" (ID: ${task.id}) processing message ${messageId}`);
 
     // التحقق من الفلاتر العامة للمهمة قبل البدء في التوجيه لكل وجهة
-    const filters = task.filters as any;
+    const taskData = await storage.getTask(task.id);
+    const filters = (taskData?.filters || task.filters) as any;
     const filterResult = await this.applyFilters(content, filters, metadata);
     
     console.log(`[Forwarder] Filter analysis completed for message ${messageId}. Result: ${filterResult.allowed ? 'ALLOWED' : 'BLOCKED'}`);
