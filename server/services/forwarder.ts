@@ -48,7 +48,11 @@ export class MessageForwarder {
       console.error(`[Forwarder] Task ${task.id} not found in database!`);
     }
     const filters = (taskData?.filters || task.filters) as any;
-    console.log(`[Forwarder] Using filters for task ${task.id}:`, JSON.stringify(filters?.aiFilters?.rules?.[0]?.instruction));
+    const aiRules = filters?.aiFilters?.rules;
+    console.log(`[Forwarder] Processing message ${messageId} for task ${task.id}. AI Rules count: ${aiRules?.length || 0}`);
+    if (aiRules && aiRules.length > 0) {
+      console.log(`[Forwarder] Active Rule 1 Instruction: "${aiRules[0].instruction}"`);
+    }
     const filterResult = await this.applyFilters(content, filters, metadata);
     
     console.log(`[Forwarder] Filter analysis completed for message ${messageId}. Result: ${filterResult.allowed ? 'ALLOWED' : 'BLOCKED'}`);
