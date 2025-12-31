@@ -390,7 +390,7 @@ export async function startMessageListener(sessionId: number) {
   // If already listening, we might need to refresh state (re-read tasks)
   // but the current implementation already reads tasks from storage inside the handler
   if (messageListeners.has(sessionId)) {
-    console.log(`[Listener] Listener already active for session ${sessionId}, will pick up task changes automatically.`);
+    console.log(`[Listener] Listener already active for session ${sessionId}, picking up changes.`);
     return;
   }
   messageListeners.set(sessionId, true);
@@ -569,7 +569,7 @@ export async function startAllMessageListeners() {
   const activeSessions = sessions.filter(s => s.isActive && activeTaskSessionIds.has(s.id));
 
   if (activeSessions.length === 0) {
-    console.log("[Listener] No active sessions with active tasks found. Skipping listener start.");
+    console.log("[Listener] No active sessions with active tasks found.");
     return;
   }
 

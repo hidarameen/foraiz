@@ -152,14 +152,18 @@ export default function TasksPage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-8 w-full lg:w-auto justify-between lg:justify-end border-t lg:border-t-0 pt-6 lg:pt-0 flex-row-reverse">
+      <div className="flex items-center gap-8 w-full lg:w-auto justify-between lg:justify-end border-t lg:border-t-0 pt-6 lg:pt-0 flex-row-reverse">
                       <div className="flex flex-col items-center lg:items-start gap-2">
                         <span className="text-xs uppercase tracking-widest text-muted-foreground font-bold opacity-60">الحالة التشغيلية</span>
-                        <Switch 
-                          checked={task.isActive || false}
-                          onCheckedChange={() => handleToggle(task.id, task.isActive || false)}
-                          className="data-[state=checked]:bg-primary"
-                        />
+                        <div className="flex items-center gap-2">
+                          {toggleTask.isPending && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
+                          <Switch 
+                            checked={task.isActive || false}
+                            onCheckedChange={() => handleToggle(task.id, task.isActive || false)}
+                            disabled={toggleTask.isPending}
+                            className="data-[state=checked]:bg-primary"
+                          />
+                        </div>
                       </div>
 
                       <div className="flex items-center gap-3">

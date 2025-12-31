@@ -432,7 +432,7 @@ export async function registerRoutes(
       bodyData: req.body
     });
     try {
-      // تنظيف البيانات الواردة للتأكد من أن mediaTypes هو كائن بقيم منطقية
+      // Clean incoming data
       if (req.body.filters?.mediaTypes && typeof req.body.filters.mediaTypes === 'object') {
         const mediaTypes = req.body.filters.mediaTypes;
         if (!Array.isArray(mediaTypes)) {
@@ -450,6 +450,9 @@ export async function registerRoutes(
         filters: cleanAIFilters(req.body.filters)
       };
 
+      // Ensure isActive is preserved if not explicitly sent as false in a toggle action
+      // In a full update, we take what's in the body.
+      
       console.log(`[Routes] Updating task ${taskId} with data:`, JSON.stringify(cleanedBody.filters?.aiFilters, null, 2));
       const input = api.tasks.update.input.parse(cleanedBody);
       logRequest("SUCCESS", api.tasks.update.path, `Input validation passed for task ${taskId}`, { input });
@@ -460,10 +463,11 @@ export async function registerRoutes(
         return res.status(404).json({ message: 'Task not found' });
       }
 
-      // تحديث المستمعين عند تعديل المهمة
+      // Restart listener immediately if task is active
       if (task.isActive) {
         const { startMessageListener } = await import("./services/telegram");
-        await startMessageListener(task.sessionId).catch(err => 
+        // We don't await this to keep the response fast, but it runs in background
+        startMessageListener(task.sessionId).catch(err => 
           console.error(`[Routes] Failed to restart listener for session ${task.sessionId}:`, err)
         );
       }
@@ -533,7 +537,8 @@ export async function registerRoutes(
       // تفعيل/إيقاف المستمع بناءً على الحالة الجديدة
       const { startMessageListener, stopMessageListener } = await import("./services/telegram");
       if (isActive) {
-        await startMessageListener(task.sessionId).catch(err => 
+        // Don't await listener start to speed up response
+        startMessageListener(task.sessionId).catch(err => 
           console.error(`[Routes] Failed to start listener for session ${task.sessionId}:`, err)
         );
       } else {
@@ -541,7 +546,9 @@ export async function registerRoutes(
         const allTasks = await storage.getTasks();
         const otherActiveTasks = allTasks.filter(t => t.sessionId === task.sessionId && t.isActive && t.id !== taskId);
         if (otherActiveTasks.length === 0) {
-          await stopMessageListener(task.sessionId);
+          stopMessageListener(task.sessionId).catch(err =>
+            console.error(`[Routes] Failed to stop listener for session ${task.sessionId}:`, err)
+          );
         }
       }
 
