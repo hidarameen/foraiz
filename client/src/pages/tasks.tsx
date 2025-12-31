@@ -356,7 +356,7 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
     // Filter out empty rules (rules without name)
     const filterEmptyRules = (rules: any[]) => {
       return (rules || [])
-        .filter(r => r.name && r.name.trim().length > 0 && r.name !== "خخشخش")
+        .filter((r: any) => r.name && r.name.trim().length > 0 && r.name !== "خخشخش")
         .map((r: any, idx: number) => ({
           ...r,
           id: r.id || `rule_${Date.now()}_${idx}`,
