@@ -239,12 +239,17 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
   });
 
   const onSubmit = (data: any) => {
-    // التأكد من أن filters تحتوي دائماً على البيانات الصحيحة
+    // التأكد من أن mediaTypes يتم إرسالها ككائن وليس مصفوفة فارغة
+    const mediaTypes = data.filters?.mediaTypes;
+    const cleanMediaTypes = (mediaTypes && typeof mediaTypes === 'object' && !Array.isArray(mediaTypes)) 
+      ? mediaTypes 
+      : DEFAULT_MEDIA_TYPES;
+
     const payload = {
       ...data,
       filters: {
         ...data.filters,
-        mediaTypes: data.filters.mediaTypes || DEFAULT_MEDIA_TYPES
+        mediaTypes: cleanMediaTypes
       }
     };
 

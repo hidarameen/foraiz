@@ -276,10 +276,10 @@ export class MessageForwarder {
     if (filters.mediaTypes && metadata) {
       const mediaTypes = filters.mediaTypes as Record<string, boolean>;
       
-      // إذا كانت المصفوفة فارغة أو الكائن فارغ، فمعناه أن كل شيء مسموح به
-      const hasMediaFilter = Object.values(mediaTypes).some(v => v === false);
+      // التحقق مما إذا كان الكائن فارغاً أو مصفوفة فارغة (بسبب خطأ في النوع)
+      const isInvalid = !mediaTypes || Array.isArray(mediaTypes) || Object.keys(mediaTypes).length === 0;
       
-      if (hasMediaFilter) {
+      if (!isInvalid) {
         let filterKey = metadata.type as string;
         
         // التحقق العميق من كائن الرسالة الخام

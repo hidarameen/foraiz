@@ -48,21 +48,7 @@ export const tasks = pgTable("tasks", {
   filters: jsonb("filters").$type<{
     keywords?: string[];
     excludeKeywords?: string[];
-    mediaTypes?: {
-      text: boolean;
-      photo: boolean;
-      video: boolean;
-      document: boolean;
-      audio: boolean;
-      voice: boolean;
-      sticker: boolean;
-      videoNote: boolean;
-      animation: boolean;
-      poll: boolean;
-      contact: boolean;
-      location: boolean;
-      invoice: boolean;
-    };
+    mediaTypes?: Record<string, boolean>;
     minId?: number;
   }>().default({
     keywords: [],
