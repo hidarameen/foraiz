@@ -293,12 +293,56 @@ export async function registerRoutes(
   });
 
   // === TASKS ===
+  // Helper function to clean legacy AI filters data
+  function cleanAIFilters(filters: any): any {
+    if (!filters || !filters.aiFilters) {
+      return filters;
+    }
+
+    const cleaned = { ...filters };
+    const aiFilters = { ...filters.aiFilters };
+
+    // Remove all legacy fields completely
+    delete aiFilters.rules;
+    delete aiFilters.blacklist;
+    delete aiFilters.whitelist;
+
+    // Ensure clean arrays with correct field names
+    aiFilters.blacklistRules = Array.isArray(aiFilters.blacklistRules) 
+      ? aiFilters.blacklistRules.map((r: any) => ({
+          id: r.id,
+          name: r.name || '',
+          instruction: r.instruction || '',
+          isActive: r.isActive ?? true,
+          priority: r.priority ?? 0
+        }))
+      : [];
+
+    aiFilters.whitelistRules = Array.isArray(aiFilters.whitelistRules)
+      ? aiFilters.whitelistRules.map((r: any) => ({
+          id: r.id,
+          name: r.name || '',
+          instruction: r.instruction || '',
+          isActive: r.isActive ?? true,
+          priority: r.priority ?? 0
+        }))
+      : [];
+
+    cleaned.aiFilters = aiFilters;
+    return cleaned;
+  }
+
   app.get(api.tasks.list.path, async (req, res) => {
     logRequest("INFO", api.tasks.list.path, "Fetching all tasks");
     try {
       const tasks = await storage.getTasks();
-      logRequest("SUCCESS", api.tasks.list.path, `Retrieved ${tasks.length} tasks`);
-      res.json(tasks);
+      // Clean all legacy fields from response
+      const cleanedTasks = tasks.map(task => ({
+        ...task,
+        filters: cleanAIFilters(task.filters)
+      }));
+      logRequest("SUCCESS", api.tasks.list.path, `Retrieved ${cleanedTasks.length} tasks`);
+      res.json(cleanedTasks);
     } catch (err: any) {
       logRequest("ERROR", api.tasks.list.path, "Failed to fetch tasks", { error: err.message });
       res.status(500).json({ message: 'Failed to fetch tasks' });
@@ -314,8 +358,13 @@ export async function registerRoutes(
         logRequest("WARN", api.tasks.get.path, `Task ${taskId} not found`);
         return res.status(404).json({ message: 'Task not found' });
       }
+      // Clean legacy fields
+      const cleanedTask = {
+        ...task,
+        filters: cleanAIFilters(task.filters)
+      };
       logRequest("SUCCESS", api.tasks.get.path, `Retrieved task ${taskId}`);
-      res.json(task);
+      res.json(cleanedTask);
     } catch (err: any) {
       logRequest("ERROR", api.tasks.get.path, `Failed to fetch task ${taskId}`, { error: err.message });
       res.status(500).json({ message: 'Failed to fetch task' });
@@ -328,15 +377,23 @@ export async function registerRoutes(
       bodyData: req.body
     });
     try {
-      // Input is already an object, the schema will handle it
-      const input = api.tasks.create.input.parse(req.body);
+      // Clean legacy fields from request
+      const cleanedBody = {
+        ...req.body,
+        filters: cleanAIFilters(req.body.filters)
+      };
+      
+      const input = api.tasks.create.input.parse(cleanedBody);
       logRequest("SUCCESS", api.tasks.create.path, "Input validation passed", { input });
       const task = await storage.createTask(input);
       logRequest("SUCCESS", api.tasks.create.path, `Task created successfully`, {
         taskId: task.id,
         taskName: task.name,
       });
-      res.status(201).json(task);
+      res.status(201).json({
+        ...task,
+        filters: cleanAIFilters(task.filters)
+      });
     } catch (err) {
       if (err instanceof z.ZodError) {
         logRequest("WARN", api.tasks.create.path, "Validation error", {
@@ -374,8 +431,14 @@ export async function registerRoutes(
         }
       }
 
-      console.log(`[Routes] Updating task ${taskId} with data:`, JSON.stringify(req.body.filters?.aiFilters, null, 2));
-      const input = api.tasks.update.input.parse(req.body);
+      // Clean legacy fields from request
+      const cleanedBody = {
+        ...req.body,
+        filters: cleanAIFilters(req.body.filters)
+      };
+
+      console.log(`[Routes] Updating task ${taskId} with data:`, JSON.stringify(cleanedBody.filters?.aiFilters, null, 2));
+      const input = api.tasks.update.input.parse(cleanedBody);
       logRequest("SUCCESS", api.tasks.update.path, `Input validation passed for task ${taskId}`, { input });
       
       const task = await storage.updateTask(taskId, input);
@@ -383,8 +446,11 @@ export async function registerRoutes(
         logRequest("WARN", api.tasks.update.path, `Task ${taskId} not found`);
         return res.status(404).json({ message: 'Task not found' });
       }
-      logRequest("SUCCESS", api.tasks.update.path, `Task ${taskId} updated successfully`, { task });
-      res.json(task);
+      logRequest("SUCCESS", api.tasks.update.path, `Task ${taskId} updated successfully`);
+      res.json({
+        ...task,
+        filters: cleanAIFilters(task.filters)
+      });
     } catch (err) {
       if (err instanceof z.ZodError) {
         logRequest("WARN", api.tasks.update.path, `Validation error for task ${taskId}`, {
