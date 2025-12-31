@@ -28,13 +28,19 @@ export class OpenAIProvider {
             }
           ],
           temperature: 0.3,
-          max_tokens: 100
+          max_tokens: 500
         })
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`OpenAI API Error: ${errorData.error?.message || response.statusText}`);
+        const errorText = await response.text();
+        console.error(`[OpenAI Provider] API Error Body:`, errorText);
+        let errorMessage = response.statusText;
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error?.message || errorMessage;
+        } catch (e) {}
+        throw new Error(`OpenAI API Error: ${errorMessage}`);
       }
 
       const data = await response.json();

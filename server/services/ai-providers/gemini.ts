@@ -28,14 +28,20 @@ export class GeminiProvider {
           ],
           generationConfig: {
             temperature: 0.3,
-            maxOutputTokens: 100
+            maxOutputTokens: 500
           }
         })
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`Google Gemini API Error: ${errorData.error?.message || response.statusText}`);
+        const errorText = await response.text();
+        console.error(`[Gemini Provider] API Error Body:`, errorText);
+        let errorMessage = response.statusText;
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error?.message || errorMessage;
+        } catch (e) {}
+        throw new Error(`Google Gemini API Error: ${errorMessage}`);
       }
 
       const data = await response.json();

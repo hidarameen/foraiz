@@ -20,15 +20,21 @@ export class HuggingFaceProvider {
         body: JSON.stringify({
           inputs: prompt,
           parameters: {
-            max_new_tokens: 100,
+            max_new_tokens: 500,
             temperature: 0.3
           }
         })
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`HuggingFace API Error: ${errorData.error?.[0] || response.statusText}`);
+        const errorText = await response.text();
+        console.error(`[HuggingFace Provider] API Error Body:`, errorText);
+        let errorMessage = response.statusText;
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error?.[0] || errorData.error || errorMessage;
+        } catch (e) {}
+        throw new Error(`HuggingFace API Error: ${errorMessage}`);
       }
 
       const data = await response.json();

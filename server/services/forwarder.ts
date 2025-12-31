@@ -346,11 +346,14 @@ ${rulesDescription}
             console.log(`[Forwarder] AI Raw Response:`, response);
             console.log(`[Forwarder] AI Decision String: ${decision}`);
             
-            if (decision.includes("BLOCK")) {
+            // Normalize decision string
+            const upperDecision = decision.split('|')[0].trim().toUpperCase();
+            
+            if (upperDecision.includes("BLOCK")) {
               return { allowed: false, reason: `حظر بواسطة الذكاء الاصطناعي: ${decision.split('|')[1]?.trim() || "محتوى غير مرغوب فيه"}` };
             }
             
-            if (aiFilters.mode === 'whitelist' && !decision.includes("ALLOW")) {
+            if (aiFilters.mode === 'whitelist' && !upperDecision.includes("ALLOW")) {
               return { allowed: false, reason: "حظر بواسطة الذكاء الاصطناعي: لم يطابق قواعد السماح (Whitelist)" };
             }
           } else {
