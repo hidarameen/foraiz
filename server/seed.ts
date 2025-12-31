@@ -4,6 +4,14 @@ import { tasks, sessions, logs } from "@shared/schema";
 import { users } from "@shared/models/auth";
 
 async function seed() {
+  console.log("Checking if seeding is needed...");
+  
+  const existingTasks = await storage.getTasks();
+  if (existingTasks.length > 0) {
+    console.log("Database already has data, skipping seed.");
+    return;
+  }
+
   console.log("Seeding database...");
   
   // Create a mock session
