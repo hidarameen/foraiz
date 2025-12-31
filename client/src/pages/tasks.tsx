@@ -289,16 +289,17 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-3xl max-h-[95vh] overflow-y-auto p-0 border-none rounded-3xl overflow-hidden shadow-3xl bg-card">
-        <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-8 border-b border-primary/10 text-right">
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-0 border-none rounded-3xl overflow-hidden shadow-3xl bg-card">
+        <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-8 border-b border-primary/10 text-right shrink-0">
           <DialogTitle className="text-3xl font-black tracking-tighter">
             {task ? 'تعديل البروتوكول' : 'تخصيص بروتوكول جديد'}
           </DialogTitle>
           <p className="text-muted-foreground mt-2">قم بضبط قواعد الأتمتة وفلاتر الوسائط بدقة.</p>
         </div>
 
-        <form onSubmit={form.handleSubmit(onSubmit)} className="p-8 space-y-10">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-right">
+        <div className="flex-1 overflow-y-auto p-8 pt-0">
+          <form id="task-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-10 pt-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-right">
             <div className="space-y-3 col-span-full">
               <Label className="text-sm font-bold uppercase tracking-widest text-primary/70">اسم البروتوكول</Label>
               <Input {...form.register("name")} className="h-14 rounded-2xl bg-muted/30 border-muted-foreground/10 focus:bg-background transition-all text-lg text-right" placeholder="مثال: فلترة الأخبار العاجلة" />
@@ -387,12 +388,20 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
               </AccordionContent>
             </AccordionItem>
           </Accordion>
+          </form>
+        </div>
 
-          <Button type="submit" disabled={create.isPending || update.isPending} className="w-full h-16 font-black text-xl rounded-2xl shadow-2xl shadow-primary/40 transition-all hover:scale-[1.01] active:scale-[0.99]">
+        <div className="p-8 border-t bg-muted/20 shrink-0">
+          <Button 
+            type="submit" 
+            form="task-form"
+            disabled={create.isPending || update.isPending} 
+            className="w-full h-16 font-black text-xl rounded-2xl shadow-2xl shadow-primary/40 transition-all hover:scale-[1.01] active:scale-[0.99]"
+          >
             {create.isPending || update.isPending ? <Loader2 className="w-6 h-6 animate-spin me-2" /> : <Settings2 className="w-6 h-6 me-2" />}
             تثبيت البروتوكول والتشغيل
           </Button>
-        </form>
+        </div>
       </DialogContent>
     </Dialog>
   );
