@@ -239,23 +239,23 @@ const DEFAULT_MEDIA_TYPES = {
     let whitelistRules = Array.isArray(aiFilters.whitelistRules) ? aiFilters.whitelistRules : [];
 
     // Filter out any suspicious rules like "خخشخش"
-    const isSuspiciousRule = (rule: any) => {
+    const isSuspiciousRule = (rule: any): boolean => {
       return !rule || !rule.name || rule.name === "خخشخش" || rule.name.trim() === "";
     };
 
-    blacklistRules = (blacklistRules || []).filter(r => !isSuspiciousRule(r));
-    whitelistRules = (whitelistRules || []).filter(r => !isSuspiciousRule(r));
+    blacklistRules = (blacklistRules || []).filter((r: any) => !isSuspiciousRule(r));
+    whitelistRules = (whitelistRules || []).filter((r: any) => !isSuspiciousRule(r));
 
     // If new format fields are empty, try to migrate from old format
     if (blacklistRules.length === 0 && aiFilters.blacklist?.rules) {
-      blacklistRules = (Array.isArray(aiFilters.blacklist.rules) ? aiFilters.blacklist.rules : []).filter(r => !isSuspiciousRule(r));
+      blacklistRules = (Array.isArray(aiFilters.blacklist.rules) ? aiFilters.blacklist.rules : []).filter((r: any) => !isSuspiciousRule(r));
     }
     if (blacklistRules.length === 0 && Array.isArray(aiFilters.rules)) {
-      blacklistRules = aiFilters.rules.filter(r => !isSuspiciousRule(r));
+      blacklistRules = aiFilters.rules.filter((r: any) => !isSuspiciousRule(r));
     }
 
     if (whitelistRules.length === 0 && aiFilters.whitelist?.rules) {
-      whitelistRules = (Array.isArray(aiFilters.whitelist.rules) ? aiFilters.whitelist.rules : []).filter(r => !isSuspiciousRule(r));
+      whitelistRules = (Array.isArray(aiFilters.whitelist.rules) ? aiFilters.whitelist.rules : []).filter((r: any) => !isSuspiciousRule(r));
     }
 
     // Return normalized structure
