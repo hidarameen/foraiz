@@ -357,7 +357,7 @@ ${rulesDescription}
             // Handle different response structures from providers
             let decision = "";
             if (typeof response === 'string') {
-              decision = response.toUpperCase();
+              decision = (response as string).toUpperCase();
             } else if (response && typeof response === 'object') {
               decision = (response as any).message?.toUpperCase() || JSON.stringify(response).toUpperCase();
             }
