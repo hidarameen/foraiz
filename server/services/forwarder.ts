@@ -334,15 +334,24 @@ ${rulesDescription}
           if (apiKey) {
             console.log(`[Forwarder] Using AI Provider: ${aiFilters.provider}, Model: ${aiFilters.model}`);
             const response = await AIService.chat(aiFilters.provider, aiFilters.model, prompt, apiKey);
-            const decision = (response as any).message?.toUpperCase() || (response as any).toString().toUpperCase();
             
-            console.log(`[Forwarder] AI Decision: ${decision}`);
+            // Handle different response structures from providers
+            let decision = "";
+            if (typeof response === 'string') {
+              decision = response.toUpperCase();
+            } else if (response && typeof response === 'object') {
+              decision = (response as any).message?.toUpperCase() || JSON.stringify(response).toUpperCase();
+            }
+            
+            console.log(`[Forwarder] AI Raw Response:`, response);
+            console.log(`[Forwarder] AI Decision String: ${decision}`);
             
             if (decision.includes("BLOCK")) {
-              return { allowed: false, reason: `حظر بواسطة الذكاء الاصطناعي: ${decision.split('|')[1]?.trim() || "غير مطابق للقواعد"}` };
+              return { allowed: false, reason: `حظر بواسطة الذكاء الاصطناعي: ${decision.split('|')[1]?.trim() || "محتوى غير مرغوب فيه"}` };
             }
+            
             if (aiFilters.mode === 'whitelist' && !decision.includes("ALLOW")) {
-              return { allowed: false, reason: "حظر بواسطة الذكاء الاصطناعي: لم يطابق قواعد السماح" };
+              return { allowed: false, reason: "حظر بواسطة الذكاء الاصطناعي: لم يطابق قواعد السماح (Whitelist)" };
             }
           } else {
             console.error(`[Forwarder] AI Filter enabled but no active API key found for ${aiFilters.provider} in database or environment`);
