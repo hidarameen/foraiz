@@ -443,7 +443,11 @@ client.addEventHandler(async (event: any) => {
 
       // Check each task
       for (const task of sessionTasks) {
-        const matchesChannel = task.sourceChannels.some(sourceId => {
+        // جلب أحدث بيانات المهمة من قاعدة البيانات لضمان استخدام الفلاتر المحدثة
+        const currentTask = await storage.getTask(task.id);
+        if (!currentTask || !currentTask.isActive) continue;
+
+        const matchesChannel = currentTask.sourceChannels.some(sourceId => {
           const cleanSourceId = sourceId.replace(/^-100/, "");
           return cleanSourceId === cleanChatId;
         });
@@ -468,7 +472,7 @@ client.addEventHandler(async (event: any) => {
             albumBuffers.set(groupId, {
               messageIds: [message.id],
               timer,
-              task,
+              task: currentTask,
               sessionId,
               chatId
             });
@@ -476,7 +480,7 @@ client.addEventHandler(async (event: any) => {
           continue; // Don't process individual album parts yet
         }
 
-        console.log(`[Listener] ✅ Task ${task.id} matched! Processing message from ${chatId}`);
+        console.log(`[Listener] ✅ Task ${currentTask.id} matched! Processing message from ${chatId}`);
 
         // IN CHANNELS, THE TEXT IS OFTEN IN message.message
         const messageText = message.message || message.text || "";
@@ -499,10 +503,10 @@ client.addEventHandler(async (event: any) => {
         // Forward message to destinations using the most reliable method
         try {
           const { forwarder } = await import("./forwarder");
-          console.log(`[Forwarder] 🚀 Checking filters for task ${task.id} with content: ${messageText.substring(0, 50)}...`);
+          console.log(`[Forwarder] 🚀 Checking filters for task ${currentTask.id} with content: ${messageText.substring(0, 50)}...`);
           
           await forwarder.forwardMessage(
-            task,
+            currentTask,
             message.id?.toString() || `msg_${Date.now()}`,
             messageText,
             { 
@@ -515,9 +519,9 @@ client.addEventHandler(async (event: any) => {
               fromChatId: chatId
             }
           );
-          console.log(`[Forwarder] ✅ Message processing completed for task ${task.id}`);
+          console.log(`[Forwarder] ✅ Message processing completed for task ${currentTask.id}`);
         } catch (err) {
-          console.error(`[Forwarder] ❌ Error forwarding message via task ${task.id}:`, err);
+          console.error(`[Forwarder] ❌ Error forwarding message via task ${currentTask.id}:`, err);
         }
       }
     }

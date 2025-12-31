@@ -377,6 +377,7 @@ export async function registerRoutes(
       console.log(`[Routes] Updating task ${taskId} with data:`, JSON.stringify(req.body.filters?.aiFilters, null, 2));
       const input = api.tasks.update.input.parse(req.body);
       logRequest("SUCCESS", api.tasks.update.path, `Input validation passed for task ${taskId}`, { input });
+      
       const task = await storage.updateTask(taskId, input);
       if (!task) {
         logRequest("WARN", api.tasks.update.path, `Task ${taskId} not found`);
