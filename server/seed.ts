@@ -3,7 +3,7 @@ import { db } from "./db";
 import { tasks, sessions, logs } from "@shared/schema";
 import { users } from "@shared/models/auth";
 
-async function seed() {
+export async function seed() {
   console.log("Checking if seeding is needed...");
   
   const existingTasks = await storage.getTasks();
@@ -14,14 +14,17 @@ async function seed() {
 
   console.log("Seeding database...");
   
-  // Create a mock session
-  const session = await storage.createSession({
-    sessionName: "Main Userbot",
-    phoneNumber: "+1234567890",
-    sessionString: "mock_session_string",
-    isActive: true
-  });
-  console.log("Created session:", session.id);
+  // Check if session 1 exists or create it
+  let session = await storage.getSession(1);
+  if (!session) {
+    session = await storage.createSession({
+      sessionName: "Main Userbot",
+      phoneNumber: "+1234567890",
+      sessionString: "mock_session_string",
+      isActive: true
+    });
+    console.log("Created mock session:", session.id);
+  }
 
   // Create a mock task
   const task = await storage.createTask({
@@ -62,5 +65,3 @@ async function seed() {
 
   console.log("Seeding complete!");
 }
-
-seed().catch(console.error);

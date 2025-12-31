@@ -64,8 +64,12 @@ app.use((req, res, next) => {
   await registerRoutes(httpServer, app);
 
   // Database initialization and seeding
-  const { seed } = await import("./seed");
-  await seed().catch(err => console.error("Seeding error:", err));
+  const seedModule = await import("./seed");
+  if (seedModule && typeof seedModule.seed === 'function') {
+    await seedModule.seed().catch(err => console.error("Seeding error:", err));
+  } else {
+    console.error("Seed function not found in seed module");
+  }
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
