@@ -300,7 +300,8 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
   const rulesFieldName = currentMode === 'whitelist' ? "filters.aiFilters.whitelistRules" : "filters.aiFilters.blacklistRules";
   const { fields, append, remove } = useFieldArray({
     control: form.control,
-    name: rulesFieldName
+    name: rulesFieldName,
+    keyName: `rule_${rulesFieldName}`
   });
 
   const [editingRuleIndex, setEditingRuleIndex] = useState<number | null>(null);
@@ -344,6 +345,15 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
   };
 
   const onSubmit = (data: any) => {
+    // Filter out empty rules (rules without name)
+    const filterEmptyRules = (rules: any[]) => {
+      return (rules || []).filter(r => r.name && r.name.trim().length > 0).map((r: any, idx: number) => ({
+        ...r,
+        id: r.id || `rule_${Date.now()}_${idx}`,
+        priority: r.priority ?? idx
+      }));
+    };
+
     const payload = {
       ...data,
       filters: {
@@ -351,16 +361,8 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
         mediaTypes: data.filters.mediaTypes || DEFAULT_MEDIA_TYPES,
         aiFilters: {
           ...data.filters.aiFilters,
-          blacklistRules: (data.filters.aiFilters.blacklistRules || []).map((r: any, idx: number) => ({
-            ...r,
-            id: r.id || `rule_${Date.now()}_${idx}`,
-            priority: r.priority ?? idx
-          })),
-          whitelistRules: (data.filters.aiFilters.whitelistRules || []).map((r: any, idx: number) => ({
-            ...r,
-            id: r.id || `rule_${Date.now()}_${idx}`,
-            priority: r.priority ?? idx
-          }))
+          blacklistRules: filterEmptyRules(data.filters.aiFilters.blacklistRules),
+          whitelistRules: filterEmptyRules(data.filters.aiFilters.whitelistRules)
         }
       }
     };
@@ -647,10 +649,14 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
                     </div>
 
                     <div className="space-y-4">
-                      {fields.map((_, index) => {
+                      {fields.map((field, index) => {
                         const rule = form.getValues(rulesFieldName)?.[index];
+                        // Skip empty rules (rules without name)
+                        if (!rule?.name || rule.name.trim().length === 0) {
+                          return null;
+                        }
                         return (
-                        <div key={index} className="p-4 bg-background rounded-2xl border border-blue-500/5 space-y-3 relative group hover:border-blue-500/20 transition-all">
+                        <div key={field.id || index} className="p-4 bg-background rounded-2xl border border-blue-500/5 space-y-3 relative group hover:border-blue-500/20 transition-all">
                           <div className="flex items-center justify-between flex-row-reverse">
                             <div className="flex items-center gap-3 flex-row-reverse">
                               <span className="bg-blue-500/10 text-blue-500 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">{index + 1}</span>

@@ -307,25 +307,29 @@ export async function registerRoutes(
     delete aiFilters.blacklist;
     delete aiFilters.whitelist;
 
-    // Ensure clean arrays with correct field names
+    // Ensure clean arrays with correct field names - filter out empty rules
     aiFilters.blacklistRules = Array.isArray(aiFilters.blacklistRules) 
-      ? aiFilters.blacklistRules.map((r: any) => ({
-          id: r.id,
-          name: r.name || '',
-          instruction: r.instruction || '',
-          isActive: r.isActive ?? true,
-          priority: r.priority ?? 0
-        }))
+      ? aiFilters.blacklistRules
+          .filter((r: any) => r.name && String(r.name).trim().length > 0)
+          .map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            instruction: r.instruction || '',
+            isActive: r.isActive ?? true,
+            priority: r.priority ?? 0
+          }))
       : [];
 
     aiFilters.whitelistRules = Array.isArray(aiFilters.whitelistRules)
-      ? aiFilters.whitelistRules.map((r: any) => ({
-          id: r.id,
-          name: r.name || '',
-          instruction: r.instruction || '',
-          isActive: r.isActive ?? true,
-          priority: r.priority ?? 0
-        }))
+      ? aiFilters.whitelistRules
+          .filter((r: any) => r.name && String(r.name).trim().length > 0)
+          .map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            instruction: r.instruction || '',
+            isActive: r.isActive ?? true,
+            priority: r.priority ?? 0
+          }))
       : [];
 
     cleaned.aiFilters = aiFilters;
