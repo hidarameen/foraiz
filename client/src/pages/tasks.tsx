@@ -239,11 +239,19 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
   });
 
   const onSubmit = (data: any) => {
-    // التأكد من أن mediaTypes يتم إرسالها ككائن وليس مصفوفة فارغة
+    // التأكد من أن mediaTypes يتم إرسالها ككائن بقيم منطقية صحيحة
     const mediaTypes = data.filters?.mediaTypes;
-    const cleanMediaTypes = (mediaTypes && typeof mediaTypes === 'object' && !Array.isArray(mediaTypes)) 
-      ? mediaTypes 
-      : DEFAULT_MEDIA_TYPES;
+    let cleanMediaTypes: Record<string, boolean> = {};
+
+    if (mediaTypes && typeof mediaTypes === 'object' && !Array.isArray(mediaTypes)) {
+      // تنظيف الكائن من أي قيم غير منطقية (مثل "on" أو سلاسل نصية)
+      Object.entries(mediaTypes).forEach(([key, value]) => {
+        // التأكد من أن القيمة منطقية تماماً (Boolean)
+        cleanMediaTypes[key] = value === true;
+      });
+    } else {
+      cleanMediaTypes = DEFAULT_MEDIA_TYPES;
+    }
 
     const payload = {
       ...data,
@@ -381,8 +389,8 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
                         name={`filters.mediaTypes.${type.key}`}
                         render={({ field }) => (
                           <Switch 
-                            checked={field.value ?? true} 
-                            onCheckedChange={field.onChange}
+                            checked={!!field.value} 
+                            onCheckedChange={(val) => field.onChange(val)}
                             className="scale-75 data-[state=checked]:bg-primary" 
                           />
                         )}

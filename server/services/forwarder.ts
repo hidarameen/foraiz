@@ -276,7 +276,7 @@ export class MessageForwarder {
     if (filters.mediaTypes && metadata) {
       const mediaTypes = filters.mediaTypes as Record<string, boolean>;
       
-      // التحقق مما إذا كان الكائن فارغاً أو مصفوفة فارغة (بسبب خطأ في النوع)
+      // التحقق مما إذا كان الكائن فارغاً أو مصفوفة فارغة
       const isInvalid = !mediaTypes || Array.isArray(mediaTypes) || Object.keys(mediaTypes).length === 0;
       
       if (!isInvalid) {
@@ -302,8 +302,9 @@ export class MessageForwarder {
           filterKey = "text";
         }
 
+        // إذا كان النوع محدداً بـ false صراحة، نرفض الرسالة
         if (filterKey && mediaTypes[filterKey] === false) {
-          console.log(`[Forwarder] Skipping message because media type "${filterKey}" is disabled in filters`);
+          console.log(`[Forwarder] Skipping message because media type "${filterKey}" is explicitly DISABLED (false)`);
           return false;
         }
       }

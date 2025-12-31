@@ -362,6 +362,18 @@ export async function registerRoutes(
       bodyData: req.body
     });
     try {
+      // تنظيف البيانات الواردة للتأكد من أن mediaTypes هو كائن بقيم منطقية
+      if (req.body.filters?.mediaTypes && typeof req.body.filters.mediaTypes === 'object') {
+        const mediaTypes = req.body.filters.mediaTypes;
+        if (!Array.isArray(mediaTypes)) {
+          const cleanedMedia: Record<string, boolean> = {};
+          Object.keys(mediaTypes).forEach(key => {
+            cleanedMedia[key] = String(mediaTypes[key]) === 'true';
+          });
+          req.body.filters.mediaTypes = cleanedMedia;
+        }
+      }
+
       const input = api.tasks.update.input.parse(req.body);
       logRequest("SUCCESS", api.tasks.update.path, `Input validation passed for task ${taskId}`, { input });
       const task = await storage.updateTask(taskId, input);
