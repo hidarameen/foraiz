@@ -473,6 +473,8 @@ export async function registerRoutes(
     const taskId = Number(req.params.id);
     logRequest("INFO", api.tasks.delete.path, `Deleting task ${taskId}`);
     try {
+      // Delete associated logs first to avoid foreign key constraint violation
+      await storage.deleteLogsByTaskId(taskId);
       await storage.deleteTask(taskId);
       logRequest("SUCCESS", api.tasks.delete.path, `Task ${taskId} deleted successfully`);
       res.status(204).send();

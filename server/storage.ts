@@ -31,6 +31,7 @@ export interface IStorage {
   // Logs
   getLogs(limit?: number): Promise<Log[]>;
   createLog(log: InsertLog): Promise<Log>;
+  deleteLogsByTaskId(taskId: number): Promise<void>;
 
   // AI Configs
   getAIConfigs(): Promise<AIConfig[]>;
@@ -110,6 +111,10 @@ export class DatabaseStorage implements IStorage {
   async createLog(insertLog: InsertLog): Promise<Log> {
     const [log] = await db.insert(logs).values(insertLog).returning();
     return log;
+  }
+
+  async deleteLogsByTaskId(taskId: number): Promise<void> {
+    await db.delete(logs).where(eq(logs.taskId, taskId));
   }
 
   // === AI CONFIGS ===
