@@ -65,6 +65,8 @@ export const tasks = pgTable("tasks", {
     };
     minId?: number;
   }>().default({
+    keywords: [],
+    excludeKeywords: [],
     mediaTypes: {
       text: true,
       photo: true,
@@ -89,7 +91,10 @@ export const tasks = pgTable("tasks", {
     delaySeconds?: number;
     addSignature?: string; // Custom footer text
     spoilerText?: boolean; // Force spoiler?
-  }>().default({}),
+  }>().default({
+    withCaption: true,
+    dropAuthor: false
+  }),
 
   isActive: boolean("is_active").default(false),
   status: text("status").default("stopped"), // stopped, running, error

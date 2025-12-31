@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Edit2, Trash2, Play, Pause, ArrowLeft, Settings, Loader2, Upload, Download, Filter, Settings2, FileText, Image as ImageIcon, Video, Music, Mic, Ghost, MessageSquare, HelpCircle, User, MapPin, ReceiptText } from "lucide-react";
@@ -209,11 +208,6 @@ export default function TasksPage() {
   );
 }
 
-const formSchema = insertTaskSchema.extend({
-  sourceChannels: z.string().transform(str => str.split(',').map(s => s.trim())),
-  destinationChannels: z.string().transform(str => str.split(',').map(s => s.trim())),
-});
-
 function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const { data: sessions } = useSessions();
@@ -222,12 +216,12 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
   const { toast } = useToast();
 
   const form = useForm({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(insertTaskSchema),
     defaultValues: {
       name: task?.name || "",
       sessionId: task?.sessionId || (sessions?.[0]?.id || 0),
-      sourceChannels: task?.sourceChannels?.join(", ") || "",
-      destinationChannels: task?.destinationChannels?.join(", ") || "",
+      sourceChannels: task?.sourceChannels || [],
+      destinationChannels: task?.destinationChannels || [],
       filters: task?.filters || { 
         keywords: [], 
         excludeKeywords: [], 
@@ -238,26 +232,18 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
         } 
       },
       options: task?.options || { withCaption: true, dropAuthor: false },
+      isActive: task?.isActive ?? false
     }
   });
 
   const onSubmit = (data: any) => {
-    const payload = {
-      ...data,
-      filters: {
-        ...data.filters,
-        keywords: typeof data.filters.keywords === 'string' ? data.filters.keywords.split(',').map((k: string) => k.trim()) : data.filters.keywords,
-        excludeKeywords: typeof data.filters.excludeKeywords === 'string' ? data.filters.excludeKeywords.split(',').map((k: string) => k.trim()) : data.filters.excludeKeywords,
-      }
-    };
-
     if (task) {
-      update.mutate({ id: task.id, ...payload }, {
+      update.mutate({ id: task.id, ...data }, {
         onSuccess: () => { setOpen(false); toast({ title: "تم التحديث بنجاح" }); },
         onError: (error) => toast({ title: "خطأ", description: (error as Error).message, variant: "destructive" })
       });
     } else {
-      create.mutate(payload, {
+      create.mutate(data, {
         onSuccess: () => { setOpen(false); toast({ title: "تم الإنشاء بنجاح" }); },
         onError: (error) => toast({ title: "خطأ", description: (error as Error).message, variant: "destructive" })
       });
@@ -327,12 +313,34 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
 
             <div className="space-y-3">
               <Label className="text-sm font-bold uppercase tracking-widest text-primary/70">القنوات المصدر</Label>
-              <Input {...form.register("sourceChannels")} className="h-14 rounded-2xl bg-muted/30 border-muted-foreground/10 font-mono text-sm text-right" placeholder="@source1, @source2" />
+              <Controller
+                control={form.control}
+                name="sourceChannels"
+                render={({ field }) => (
+                  <Input 
+                    value={field.value?.join(", ") || ""} 
+                    onChange={(e) => field.onChange(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                    className="h-14 rounded-2xl bg-muted/30 border-muted-foreground/10 font-mono text-sm text-right" 
+                    placeholder="@source1, @source2" 
+                  />
+                )}
+              />
             </div>
 
             <div className="space-y-3">
               <Label className="text-sm font-bold uppercase tracking-widest text-primary/70">القنوات المستهدفة</Label>
-              <Input {...form.register("destinationChannels")} className="h-14 rounded-2xl bg-muted/30 border-muted-foreground/10 font-mono text-sm text-right" placeholder="@target_channel" />
+              <Controller
+                control={form.control}
+                name="destinationChannels"
+                render={({ field }) => (
+                  <Input 
+                    value={field.value?.join(", ") || ""} 
+                    onChange={(e) => field.onChange(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                    className="h-14 rounded-2xl bg-muted/30 border-muted-foreground/10 font-mono text-sm text-right" 
+                    placeholder="@target_channel" 
+                  />
+                )}
+              />
             </div>
           </div>
 
@@ -378,11 +386,33 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-3">
                     <Label className="text-xs font-black uppercase text-muted-foreground tracking-widest">الكلمات المطلوبة</Label>
-                    <Input placeholder="عاجل، حصري، مباشر" className="rounded-xl h-12 bg-background/50 text-right" {...form.register("filters.keywords")} />
+                    <Controller
+                      control={form.control}
+                      name="filters.keywords"
+                      render={({ field }) => (
+                        <Input 
+                          value={field.value?.join(", ") || ""} 
+                          onChange={(e) => field.onChange(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                          placeholder="عاجل، حصري، مباشر" 
+                          className="rounded-xl h-12 bg-background/50 text-right" 
+                        />
+                      )}
+                    />
                   </div>
                   <div className="space-y-3">
                     <Label className="text-xs font-black uppercase text-muted-foreground tracking-widest">الكلمات المستبعدة</Label>
-                    <Input placeholder="إعلان، ممول، ترويجي" className="rounded-xl h-12 bg-background/50 text-right" {...form.register("filters.excludeKeywords")} />
+                    <Controller
+                      control={form.control}
+                      name="filters.excludeKeywords"
+                      render={({ field }) => (
+                        <Input 
+                          value={field.value?.join(", ") || ""} 
+                          onChange={(e) => field.onChange(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                          placeholder="إعلان، ممول، ترويجي" 
+                          className="rounded-xl h-12 bg-background/50 text-right" 
+                        />
+                      )}
+                    />
                   </div>
                 </div>
               </AccordionContent>

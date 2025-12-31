@@ -42,26 +42,27 @@ export class MessageForwarder {
 
     console.log(`[Forwarder] Task "${task.name}" (ID: ${task.id}) processing message ${messageId}`);
 
+    // التحقق من الفلاتر العامة للمهمة قبل البدء في التوجيه لكل وجهة
+    const filters = task.filters as any;
+    if (!this.applyFilters(content, filters, metadata)) {
+      console.log(`[Forwarder] Message ${messageId} skipped by filters for task "${task.name}"`);
+      
+      // تسجيل سجل واحد للتخطي بدلاً من تكراره لكل وجهة إذا كان الفلتر عاماً
+      await storage.createLog({
+        taskId: task.id,
+        sourceChannel: metadata?.fromChatId?.toString() || task.sourceChannels[0],
+        destinationChannel: "Filtered Out",
+        messageId,
+        status: "skipped",
+        details: "Filtered by criteria (keywords or media types)",
+      });
+
+      return results;
+    }
+
     // معالجة كل وجهة
     for (const destination of task.destinationChannels) {
       try {
-        // التحقق من الفلاتر الخاصة بالمهمة
-        const filters = task.filters as any;
-        if (!this.applyFilters(content, filters, metadata)) {
-          console.log(`[Forwarder] Message ${messageId} skipped by filters for task "${task.name}"`);
-          
-          await storage.createLog({
-            taskId: task.id,
-            sourceChannel: metadata?.fromChatId?.toString() || task.sourceChannels[0],
-            destinationChannel: destination,
-            messageId,
-            status: "skipped",
-            details: "Filtered by keywords",
-          });
-
-          continue;
-        }
-
         // تطبيق التنسيقات والخيارات الخاصة بالمهمة
         let finalContent = content;
         const options = task.options as any;
@@ -137,14 +138,7 @@ export class MessageForwarder {
         console.log(`[Forwarder] Sending album (${messageIds.length} items) as new messages to ${destination}`);
         
         // Fetch all message objects to get their media
-        const { getTelegramClient } = await import("./telegram");
-        const clientInstance = await getTelegramClient(task.sessionId);
-        
-        if (!clientInstance) {
-          throw new Error("No active client for session during album fetch");
-        }
-        
-        const messages = await clientInstance.getMessages(sourceChatId, { ids: messageIds });
+        const messages = await client.getMessages(sourceChatId, { ids: messageIds });
         
         // Extract the first non-empty caption from the album
         let albumCaption = "";
@@ -159,9 +153,7 @@ export class MessageForwarder {
         }
         
         // Use the media objects directly from the fetched messages
-        // We use formattingEntities to preserve all complex formatting like blockquotes and spoilers
-        // IMPORTANT: We must also pass formattingEntities to allow Telegram to process the entities correctly
-        await clientInstance.sendMessage(destination, {
+        await client.sendMessage(destination, {
           file: messages.map(msg => msg.media).filter(media => !!media),
           message: albumCaption,
           formattingEntities: albumEntities,
@@ -217,10 +209,8 @@ export class MessageForwarder {
 
       // If it has media, we'll send it as a NEW message using the file property
       // this hides the "Forwarded from" tag and creates a clean copy
-      if (metadata?.hasMedia && metadata?.originalMessageId && metadata?.fromChatId) {
-        console.log(`[Forwarder] Sending media ${metadata.originalMessageId} as new message to ${destination}`);
-        
-        const sourcePeer = await client.getInputEntity(metadata.fromChatId);
+      if (metadata?.hasMedia && metadata?.rawMessage?.media) {
+        console.log(`[Forwarder] Sending media as new message to ${destination}`);
         
         await client.sendMessage(destination, {
           file: metadata.rawMessage.media,
@@ -229,7 +219,7 @@ export class MessageForwarder {
         });
         
         return {
-          messageId: metadata.originalMessageId.toString(),
+          messageId: metadata.originalMessageId?.toString() || "media",
           success: true,
           details: "Media sent as new message successfully",
           timestamp: new Date(),
@@ -287,10 +277,8 @@ export class MessageForwarder {
       const type = metadata.type as string;
       const mediaTypes = filters.mediaTypes as Record<string, boolean>;
       
-      // Map telegram media types to our filter keys if needed
       let filterKey = type;
       if (metadata.hasMedia && !type) {
-        // Fallback detection logic if type is missing but hasMedia is true
         if (metadata.rawMessage?.photo) filterKey = "photo";
         else if (metadata.rawMessage?.video) filterKey = "video";
         else if (metadata.rawMessage?.document) filterKey = "document";
@@ -307,65 +295,32 @@ export class MessageForwarder {
         filterKey = "text";
       }
 
-      // إذا كان النوع غير مسموح به، نتخطى الرسالة
       if (filterKey && mediaTypes[filterKey] === false) {
         console.log(`[Forwarder] Skipping message because media type "${filterKey}" is disabled in filters`);
         return false;
       }
     }
 
-    // فلتر الكلمات المفتاحية (فقط للرسائل النصية أو التي تحتوي على نص)
-    if (content) {
-      if (filters.keywords && filters.keywords.length > 0) {
-        const hasKeyword = filters.keywords.some(
-          (keyword: string) => content.toLowerCase().includes(keyword.toLowerCase())
-        );
-        if (!hasKeyword) return false;
-      }
+    // فلتر الكلمات المفتاحية
+    const textToSearch = (content || "").toLowerCase();
+    
+    // استبعاد الكلمات (أولوية قصوى)
+    if (filters.excludeKeywords && Array.isArray(filters.excludeKeywords) && filters.excludeKeywords.length > 0) {
+      const hasExcludedKeyword = filters.excludeKeywords.some(
+        (keyword: string) => textToSearch.includes(keyword.toLowerCase())
+      );
+      if (hasExcludedKeyword) return false;
+    }
 
-      // استبعاد الكلمات
-      if (filters.excludeKeywords && filters.excludeKeywords.length > 0) {
-        const hasExcludedKeyword = filters.excludeKeywords.some(
-          (keyword: string) => content.toLowerCase().includes(keyword.toLowerCase())
-        );
-        if (hasExcludedKeyword) return false;
-      }
+    // الكلمات المطلوبة
+    if (filters.keywords && Array.isArray(filters.keywords) && filters.keywords.length > 0) {
+      const hasKeyword = filters.keywords.some(
+        (keyword: string) => textToSearch.includes(keyword.toLowerCase())
+      );
+      if (!hasKeyword) return false;
     }
 
     return true;
-  }
-
-  /**
-   * تطبيق التنسيقات المتقدمة
-   * (bold, italic, code, spoiler, etc)
-   */
-  applyFormatting(
-    content: string,
-    formats: string[] = []
-  ): string {
-    let result = content;
-
-    for (const format of formats) {
-      switch (format) {
-        case "bold":
-          result = `**${result}**`;
-          break;
-        case "italic":
-          result = `__${result}__`;
-          break;
-        case "code":
-          result = "`" + result + "`";
-          break;
-        case "spoiler":
-          result = `||${result}||`;
-          break;
-        case "quote":
-          result = `> ${result}`;
-          break;
-      }
-    }
-
-    return result;
   }
 
   /**

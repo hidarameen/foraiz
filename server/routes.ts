@@ -328,13 +328,13 @@ export async function registerRoutes(
       bodyData: req.body
     });
     try {
+      // Input is already an object, the schema will handle it
       const input = api.tasks.create.input.parse(req.body);
       logRequest("SUCCESS", api.tasks.create.path, "Input validation passed", { input });
       const task = await storage.createTask(input);
       logRequest("SUCCESS", api.tasks.create.path, `Task created successfully`, {
         taskId: task.id,
         taskName: task.name,
-        taskData: task
       });
       res.status(201).json(task);
     } catch (err) {
@@ -351,7 +351,7 @@ export async function registerRoutes(
         error: (err as any).message,
         stack: (err as any).stack 
       });
-      throw err;
+      res.status(500).json({ message: (err as any).message });
     }
   });
 
