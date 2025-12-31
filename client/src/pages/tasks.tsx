@@ -227,6 +227,14 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
   const update = useUpdateTask();
   const { toast } = useToast();
 
+  const { data: aiConfig } = useQuery<any>({
+    queryKey: ["/api/ai/config"],
+  });
+
+  const { data: aiSettings } = useQuery<any[]>({
+    queryKey: ["/api/ai/settings"],
+  });
+
   const form = useForm({
     resolver: zodResolver(insertTaskSchema),
     defaultValues: {
@@ -248,6 +256,10 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
       isActive: task?.isActive ?? false
     }
   });
+
+  const selectedProvider = form.watch("filters.aiFilters.provider");
+  const availableModels = aiConfig?.[selectedProvider]?.models || [];
+  const activeProviders = aiSettings?.filter(s => s.isActive).map(s => s.provider) || [];
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -442,13 +454,29 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
                         control={form.control}
                         name="filters.aiFilters.provider"
                         render={({ field }) => (
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <SelectTrigger className="rounded-xl flex-row-reverse"><SelectValue /></SelectTrigger>
+                          <Select 
+                            onValueChange={(val) => {
+                              field.onChange(val);
+                              // Reset model to first available for the provider
+                              const providerModels = aiConfig?.[val]?.models || [];
+                              if (providerModels.length > 0) {
+                                form.setValue("filters.aiFilters.model", providerModels[0].id);
+                              }
+                            }} 
+                            value={field.value}
+                          >
+                            <SelectTrigger className="rounded-xl flex-row-reverse">
+                              <SelectValue placeholder="اختر المزود" />
+                            </SelectTrigger>
                             <SelectContent className="text-right">
-                              <SelectItem value="openai">OpenAI</SelectItem>
-                              <SelectItem value="anthropic">Anthropic</SelectItem>
-                              <SelectItem value="groq">Groq (أداء سريع)</SelectItem>
-                              <SelectItem value="gemini">Google Gemini</SelectItem>
+                              {aiConfig && Object.entries(aiConfig).map(([id, p]: [string, any]) => (
+                                <SelectItem key={id} value={id} className="flex-row-reverse gap-2">
+                                  <span>{p.name}</span>
+                                  {!activeProviders.includes(id) && (
+                                    <span className="text-[10px] bg-yellow-500/10 text-yellow-600 px-1.5 py-0.5 rounded ml-2">غير مفعل</span>
+                                  )}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         )}
@@ -456,7 +484,25 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
                     </div>
                     <div className="space-y-2">
                       <Label className="font-bold">الموديل (Model)</Label>
-                      <Input {...form.register("filters.aiFilters.model")} className="rounded-xl text-right" placeholder="gpt-4o-mini" />
+                      <Controller
+                        control={form.control}
+                        name="filters.aiFilters.model"
+                        render={({ field }) => (
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <SelectTrigger className="rounded-xl flex-row-reverse">
+                              <SelectValue placeholder="اختر الموديل" />
+                            </SelectTrigger>
+                            <SelectContent className="text-right">
+                              {availableModels.map((m: any) => (
+                                <SelectItem key={m.id} value={m.id} className="flex-row-reverse">{m.name}</SelectItem>
+                              ))}
+                              {availableModels.length === 0 && (
+                                <div className="p-2 text-center text-xs text-muted-foreground">لا توجد موديلات متاحة</div>
+                              )}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
                     </div>
                   </div>
 

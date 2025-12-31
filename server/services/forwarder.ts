@@ -331,8 +331,11 @@ ${rulesDescription}
           const apiKey = activeConfig?.apiKey || process.env[`${aiFilters.provider.toUpperCase()}_API_KEY`];
 
           if (apiKey) {
+            console.log(`[Forwarder] Using AI Provider: ${aiFilters.provider}, Model: ${aiFilters.model}`);
             const response = await AIService.chat(aiFilters.provider, aiFilters.model, prompt, apiKey);
             const decision = response.toUpperCase();
+            
+            console.log(`[Forwarder] AI Decision: ${decision}`);
             
             if (decision.includes("BLOCK")) {
               return { allowed: false, reason: `حظر بواسطة الذكاء الاصطناعي: ${decision.split('|')[1]?.trim() || "غير مطابق للقواعد"}` };
@@ -341,7 +344,8 @@ ${rulesDescription}
               return { allowed: false, reason: "حظر بواسطة الذكاء الاصطناعي: لم يطابق قواعد السماح" };
             }
           } else {
-            console.error(`[Forwarder] AI Filter enabled but no API key found for ${aiFilters.provider}`);
+            console.error(`[Forwarder] AI Filter enabled but no active API key found for ${aiFilters.provider} in database or environment`);
+            // Fallback: If AI is mandatory but fails due to config, we might want to log it
           }
         } catch (error) {
           console.error(`[Forwarder] AI Filtering failed:`, error);
