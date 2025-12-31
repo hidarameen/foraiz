@@ -208,6 +208,12 @@ export default function TasksPage() {
   );
 }
 
+const DEFAULT_MEDIA_TYPES = {
+  text: true, photo: true, video: true, document: true, audio: true, 
+  voice: true, sticker: true, videoNote: true, animation: true,
+  poll: true, contact: true, location: true, invoice: true
+};
+
 function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const { data: sessions } = useSessions();
@@ -222,14 +228,10 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
       sessionId: task?.sessionId || (sessions?.[0]?.id || 0),
       sourceChannels: task?.sourceChannels || [],
       destinationChannels: task?.destinationChannels || [],
-      filters: task?.filters || { 
-        keywords: [], 
-        excludeKeywords: [], 
-        mediaTypes: {
-          text: true, photo: true, video: true, document: true, audio: true, 
-          voice: true, sticker: true, videoNote: true, animation: true,
-          poll: true, contact: true, location: true, invoice: true
-        } 
+      filters: {
+        keywords: task?.filters?.keywords || [],
+        excludeKeywords: task?.filters?.excludeKeywords || [],
+        mediaTypes: task?.filters?.mediaTypes || DEFAULT_MEDIA_TYPES
       },
       options: task?.options || { withCaption: true, dropAuthor: false },
       isActive: task?.isActive ?? false
@@ -237,13 +239,22 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
   });
 
   const onSubmit = (data: any) => {
+    // التأكد من أن filters تحتوي دائماً على البيانات الصحيحة
+    const payload = {
+      ...data,
+      filters: {
+        ...data.filters,
+        mediaTypes: data.filters.mediaTypes || DEFAULT_MEDIA_TYPES
+      }
+    };
+
     if (task) {
-      update.mutate({ id: task.id, ...data }, {
+      update.mutate({ id: task.id, ...payload }, {
         onSuccess: () => { setOpen(false); toast({ title: "تم التحديث بنجاح" }); },
         onError: (error) => toast({ title: "خطأ", description: (error as Error).message, variant: "destructive" })
       });
     } else {
-      create.mutate(data, {
+      create.mutate(payload, {
         onSuccess: () => { setOpen(false); toast({ title: "تم الإنشاء بنجاح" }); },
         onError: (error) => toast({ title: "خطأ", description: (error as Error).message, variant: "destructive" })
       });
@@ -365,7 +376,7 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
                         name={`filters.mediaTypes.${type.key}`}
                         render={({ field }) => (
                           <Switch 
-                            checked={field.value} 
+                            checked={field.value ?? true} 
                             onCheckedChange={field.onChange}
                             className="scale-75 data-[state=checked]:bg-primary" 
                           />

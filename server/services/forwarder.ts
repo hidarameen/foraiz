@@ -274,30 +274,38 @@ export class MessageForwarder {
 
     // فحص نوع الوسائط
     if (filters.mediaTypes && metadata) {
-      const type = metadata.type as string;
       const mediaTypes = filters.mediaTypes as Record<string, boolean>;
       
-      let filterKey = type;
-      if (metadata.hasMedia && !type) {
-        if (metadata.rawMessage?.photo) filterKey = "photo";
-        else if (metadata.rawMessage?.video) filterKey = "video";
-        else if (metadata.rawMessage?.document) filterKey = "document";
-        else if (metadata.rawMessage?.audio) filterKey = "audio";
-        else if (metadata.rawMessage?.voice) filterKey = "voice";
-        else if (metadata.rawMessage?.sticker) filterKey = "sticker";
-        else if (metadata.rawMessage?.videoNote) filterKey = "videoNote";
-        else if (metadata.rawMessage?.gif || metadata.rawMessage?.animation) filterKey = "animation";
-        else if (metadata.rawMessage?.poll) filterKey = "poll";
-        else if (metadata.rawMessage?.contact) filterKey = "contact";
-        else if (metadata.rawMessage?.location) filterKey = "location";
-        else if (metadata.rawMessage?.invoice) filterKey = "invoice";
-      } else if (!metadata.hasMedia) {
-        filterKey = "text";
-      }
+      // إذا كانت المصفوفة فارغة أو الكائن فارغ، فمعناه أن كل شيء مسموح به
+      const hasMediaFilter = Object.values(mediaTypes).some(v => v === false);
+      
+      if (hasMediaFilter) {
+        let filterKey = metadata.type as string;
+        
+        // التحقق العميق من كائن الرسالة الخام
+        const rawMsg = metadata.rawMessage;
+        if (rawMsg) {
+          if (rawMsg.photo) filterKey = "photo";
+          else if (rawMsg.video) filterKey = "video";
+          else if (rawMsg.document) filterKey = "document";
+          else if (rawMsg.audio) filterKey = "audio";
+          else if (rawMsg.voice) filterKey = "voice";
+          else if (rawMsg.sticker) filterKey = "sticker";
+          else if (rawMsg.videoNote) filterKey = "videoNote";
+          else if (rawMsg.gif || rawMsg.animation) filterKey = "animation";
+          else if (rawMsg.poll) filterKey = "poll";
+          else if (rawMsg.contact) filterKey = "contact";
+          else if (rawMsg.location) filterKey = "location";
+          else if (rawMsg.invoice) filterKey = "invoice";
+          else if (!metadata.hasMedia) filterKey = "text";
+        } else if (!metadata.hasMedia) {
+          filterKey = "text";
+        }
 
-      if (filterKey && mediaTypes[filterKey] === false) {
-        console.log(`[Forwarder] Skipping message because media type "${filterKey}" is disabled in filters`);
-        return false;
+        if (filterKey && mediaTypes[filterKey] === false) {
+          console.log(`[Forwarder] Skipping message because media type "${filterKey}" is disabled in filters`);
+          return false;
+        }
       }
     }
 
