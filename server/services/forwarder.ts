@@ -6,6 +6,7 @@
 
 import { storage } from "../storage";
 import type { Task, Log } from "@shared/schema";
+import { AIService } from "./ai";
 
 export interface ForwardingResult {
   messageId: string;
@@ -16,7 +17,6 @@ export interface ForwardingResult {
 
 /**
  * معالج التوجيه الأساسي
- * هذا الهيكل سيتم توسيعه لاحقاً مع Pyrogram
  */
 export class MessageForwarder {
   /**
@@ -44,17 +44,17 @@ export class MessageForwarder {
 
     // التحقق من الفلاتر العامة للمهمة قبل البدء في التوجيه لكل وجهة
     const filters = task.filters as any;
-    if (!this.applyFilters(content, filters, metadata)) {
-      console.log(`[Forwarder] Message ${messageId} skipped by filters for task "${task.name}"`);
+    const filterResult = await this.applyFilters(content, filters, metadata);
+    if (!filterResult.allowed) {
+      console.log(`[Forwarder] Message ${messageId} skipped by filters for task "${task.name}": ${filterResult.reason}`);
       
-      // تسجيل سجل واحد للتخطي بدلاً من تكراره لكل وجهة إذا كان الفلتر عاماً
       await storage.createLog({
         taskId: task.id,
         sourceChannel: metadata?.fromChatId?.toString() || task.sourceChannels[0],
         destinationChannel: "Filtered Out",
         messageId,
         status: "skipped",
-        details: "Filtered by criteria (keywords or media types)",
+        details: filterResult.reason || "Filtered by criteria",
       });
 
       return results;
@@ -208,7 +208,6 @@ export class MessageForwarder {
       }
 
       // If it has media, we'll send it as a NEW message using the file property
-      // this hides the "Forwarded from" tag and creates a clean copy
       if (metadata?.hasMedia && metadata?.rawMessage?.media) {
         console.log(`[Forwarder] Sending media as new message to ${destination}`);
         
@@ -265,24 +264,20 @@ export class MessageForwarder {
   /**
    * تطبيق الفلاتر على الرسائل
    */
-  applyFilters(
+  async applyFilters(
     content: string,
     filters?: Record<string, any>,
     metadata?: Record<string, any>
-  ): boolean {
-    if (!filters) return true;
+  ): Promise<{ allowed: boolean; reason?: string }> {
+    if (!filters) return { allowed: true };
 
-    // فحص نوع الوسائط
+    // 1. فحص نوع الوسائط
     if (filters.mediaTypes && metadata) {
       const mediaTypes = filters.mediaTypes as Record<string, boolean>;
-      
-      // التحقق مما إذا كان الكائن فارغاً أو مصفوفة فارغة
       const isInvalid = !mediaTypes || Array.isArray(mediaTypes) || Object.keys(mediaTypes).length === 0;
       
       if (!isInvalid) {
         let filterKey = metadata.type as string;
-        
-        // التحقق العميق من كائن الرسالة الخام
         const rawMsg = metadata.rawMessage;
         if (rawMsg) {
           if (rawMsg.photo) filterKey = "photo";
@@ -302,34 +297,59 @@ export class MessageForwarder {
           filterKey = "text";
         }
 
-        // إذا كان النوع محدداً بـ false صراحة، نرفض الرسالة
         if (filterKey && mediaTypes[filterKey] === false) {
-          console.log(`[Forwarder] Skipping message because media type "${filterKey}" is explicitly DISABLED (false)`);
-          return false;
+          return { allowed: false, reason: `نوع الوسائط "${filterKey}" محظور` };
         }
       }
     }
 
-    // فلتر الكلمات المفتاحية
-    const textToSearch = (content || "").toLowerCase();
-    
-    // استبعاد الكلمات (أولوية قصوى)
-    if (filters.excludeKeywords && Array.isArray(filters.excludeKeywords) && filters.excludeKeywords.length > 0) {
-      const hasExcludedKeyword = filters.excludeKeywords.some(
-        (keyword: string) => textToSearch.includes(keyword.toLowerCase())
-      );
-      if (hasExcludedKeyword) return false;
+    // 2. فلاتر الذكاء الاصطناعي
+    const aiFilters = filters.aiFilters;
+    if (aiFilters?.isEnabled && aiFilters.rules?.length > 0) {
+      const activeRules = aiFilters.rules
+        .filter((r: any) => r.isActive)
+        .sort((a: any, b: any) => (a.priority || 0) - (b.priority || 0));
+
+      if (activeRules.length > 0 && (content || metadata?.originalText)) {
+        const textToAnalyze = content || metadata?.originalText || "";
+        const rulesDescription = activeRules.map((r: any) => `- ${r.name}: ${r.instruction}`).join('\n');
+        
+        const prompt = `أنت مساعد ذكي مهمتك فحص محتوى الرسائل وتحديد ما إذا كانت تطابق القواعد المحددة.
+الرسالة: "${textToAnalyze}"
+
+القواعد:
+${rulesDescription}
+
+الوضع الحالي: ${aiFilters.mode === 'whitelist' ? 'القائمة البيضاء (السماح فقط إذا طابقت القواعد)' : 'القائمة السوداء (الحظر إذا طابقت القواعد)'}
+
+أجب بـ "ALLOW" للسماح بالرسالة أو "BLOCK" لحظرها، متبوعاً بسبب قصير جداً باللغة العربية.
+مثال: BLOCK | المحتوى إعلاني`;
+
+        try {
+          const config = await storage.getAIConfigs();
+          const activeConfig = config.find(c => c.provider === aiFilters.provider && c.isActive);
+          const apiKey = activeConfig?.apiKey || process.env[`${aiFilters.provider.toUpperCase()}_API_KEY`];
+
+          if (apiKey) {
+            const response = await AIService.chat(aiFilters.provider, aiFilters.model, prompt, apiKey);
+            const decision = response.toUpperCase();
+            
+            if (decision.includes("BLOCK")) {
+              return { allowed: false, reason: `حظر بواسطة الذكاء الاصطناعي: ${decision.split('|')[1]?.trim() || "غير مطابق للقواعد"}` };
+            }
+            if (aiFilters.mode === 'whitelist' && !decision.includes("ALLOW")) {
+              return { allowed: false, reason: "حظر بواسطة الذكاء الاصطناعي: لم يطابق قواعد السماح" };
+            }
+          } else {
+            console.error(`[Forwarder] AI Filter enabled but no API key found for ${aiFilters.provider}`);
+          }
+        } catch (error) {
+          console.error(`[Forwarder] AI Filtering failed:`, error);
+        }
+      }
     }
 
-    // الكلمات المطلوبة
-    if (filters.keywords && Array.isArray(filters.keywords) && filters.keywords.length > 0) {
-      const hasKeyword = filters.keywords.some(
-        (keyword: string) => textToSearch.includes(keyword.toLowerCase())
-      );
-      if (!hasKeyword) return false;
-    }
-
-    return true;
+    return { allowed: true };
   }
 
   /**

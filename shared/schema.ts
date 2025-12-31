@@ -46,13 +46,22 @@ export const tasks = pgTable("tasks", {
   
   // Filters & Options stored as JSON for flexibility
   filters: jsonb("filters").$type<{
-    keywords?: string[];
-    excludeKeywords?: string[];
     mediaTypes?: Record<string, boolean>;
+    aiFilters?: {
+      isEnabled: boolean;
+      provider: string;
+      model: string;
+      mode: 'whitelist' | 'blacklist';
+      rules: {
+        id: string;
+        name: string;
+        instruction: string; // The rule for the AI
+        isActive: boolean;
+        priority: number;
+      }[];
+    };
     minId?: number;
   }>().default({
-    keywords: [],
-    excludeKeywords: [],
     mediaTypes: {
       text: true,
       photo: true,
@@ -67,6 +76,13 @@ export const tasks = pgTable("tasks", {
       contact: true,
       location: true,
       invoice: true,
+    },
+    aiFilters: {
+      isEnabled: false,
+      provider: "openai",
+      model: "gpt-4o-mini",
+      mode: "blacklist",
+      rules: []
     }
   }),
   

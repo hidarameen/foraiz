@@ -9,9 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Edit2, Trash2, Play, Pause, ArrowLeft, Settings, Loader2, Upload, Download, Filter, Settings2, FileText, Image as ImageIcon, Video, Music, Mic, Ghost, MessageSquare, HelpCircle, User, MapPin, ReceiptText } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Plus, Edit2, Trash2, Play, Pause, ArrowLeft, Settings, Loader2, Upload, Download, Filter, Settings2, FileText, Image as ImageIcon, Video, Music, Mic, Ghost, MessageSquare, HelpCircle, User, MapPin, ReceiptText, Brain, Sparkles, AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertTaskSchema, type Task } from "@shared/schema";
 import { z } from "zod";
@@ -88,7 +89,7 @@ export default function TasksPage() {
           <h1 className="text-4xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/60">
             إدارة بروتوكولات المهام
           </h1>
-          <p className="text-muted-foreground text-lg text-right">تحكم كامل في عمليات الأتمتة والتحويل الذكي.</p>
+          <p className="text-muted-foreground text-lg text-right">تحكم كامل في عمليات الأتمتة والتحويل الذكي بالذكاء الاصطناعي.</p>
         </div>
         <div className="flex gap-3">
           <label className="cursor-pointer">
@@ -131,6 +132,11 @@ export default function TasksPage() {
                           <div className={`px-3 py-1 rounded-full text-xs font-bold ${task.status === "running" ? "bg-primary/20 text-primary" : "bg-secondary/20 text-secondary"}`}>
                             {task.status === "running" ? "نشط الآن" : "خامل"}
                           </div>
+                          {(task.filters as any)?.aiFilters?.isEnabled && (
+                            <div className="px-3 py-1 rounded-full text-xs font-bold bg-blue-500/20 text-blue-400 flex items-center gap-1">
+                              <Brain className="w-3 h-3" /> ذكاء اصطناعي
+                            </div>
+                          )}
                         </div>
                         <div className="flex flex-wrap items-center gap-4 text-sm font-medium justify-start md:justify-end flex-row-reverse">
                           <div className="flex items-center gap-2 bg-primary/10 text-primary px-3 py-1 rounded-lg">
@@ -229,35 +235,39 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
       sourceChannels: task?.sourceChannels || [],
       destinationChannels: task?.destinationChannels || [],
       filters: {
-        keywords: task?.filters?.keywords || [],
-        excludeKeywords: task?.filters?.excludeKeywords || [],
-        mediaTypes: task?.filters?.mediaTypes || DEFAULT_MEDIA_TYPES
+        mediaTypes: task?.filters?.mediaTypes || DEFAULT_MEDIA_TYPES,
+        aiFilters: task?.filters?.aiFilters || {
+          isEnabled: false,
+          provider: "openai",
+          model: "gpt-4o-mini",
+          mode: "blacklist",
+          rules: []
+        }
       },
       options: task?.options || { withCaption: true, dropAuthor: false },
       isActive: task?.isActive ?? false
     }
   });
 
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "filters.aiFilters.rules"
+  });
+
   const onSubmit = (data: any) => {
-    // التأكد من أن mediaTypes يتم إرسالها ككائن بقيم منطقية صحيحة
-    const mediaTypes = data.filters?.mediaTypes;
-    let cleanMediaTypes: Record<string, boolean> = {};
-
-    if (mediaTypes && typeof mediaTypes === 'object' && !Array.isArray(mediaTypes)) {
-      // تنظيف الكائن من أي قيم غير منطقية (مثل "on" أو سلاسل نصية)
-      Object.entries(mediaTypes).forEach(([key, value]) => {
-        // التأكد من أن القيمة منطقية تماماً (Boolean)
-        cleanMediaTypes[key] = value === true;
-      });
-    } else {
-      cleanMediaTypes = DEFAULT_MEDIA_TYPES;
-    }
-
     const payload = {
       ...data,
       filters: {
         ...data.filters,
-        mediaTypes: cleanMediaTypes
+        mediaTypes: data.filters.mediaTypes || DEFAULT_MEDIA_TYPES,
+        aiFilters: {
+          ...data.filters.aiFilters,
+          rules: data.filters.aiFilters.rules.map((r: any, idx: number) => ({
+            ...r,
+            id: r.id || `rule_${Date.now()}_${idx}`,
+            priority: r.priority ?? idx
+          }))
+        }
       }
     };
 
@@ -299,149 +309,242 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-0 border-none rounded-3xl overflow-hidden shadow-3xl bg-card">
+      <DialogContent className="sm:max-w-4xl max-h-[95vh] flex flex-col p-0 border-none rounded-3xl overflow-hidden shadow-3xl bg-card">
         <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-8 border-b border-primary/10 text-right shrink-0">
-          <DialogTitle className="text-3xl font-black tracking-tighter">
-            {task ? 'تعديل البروتوكول' : 'تخصيص بروتوكول جديد'}
+          <DialogTitle className="text-3xl font-black tracking-tighter flex items-center gap-3 justify-end">
+            <Sparkles className="w-8 h-8 text-primary animate-pulse" />
+            {task ? 'تعديل البروتوكول' : 'تخصيص بروتوكول ذكي جديد'}
           </DialogTitle>
-          <p className="text-muted-foreground mt-2">قم بضبط قواعد الأتمتة وفلاتر الوسائط بدقة.</p>
+          <p className="text-muted-foreground mt-2">قم بضبط قواعد الأتمتة وفلاتر الذكاء الاصطناعي المتقدمة.</p>
         </div>
 
         <div className="flex-1 overflow-y-auto p-8 pt-0">
           <form id="task-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-10 pt-8">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-right">
-            <div className="space-y-3 col-span-full">
-              <Label className="text-sm font-bold uppercase tracking-widest text-primary/70">اسم البروتوكول</Label>
-              <Input {...form.register("name")} className="h-14 rounded-2xl bg-muted/30 border-muted-foreground/10 focus:bg-background transition-all text-lg text-right" placeholder="مثال: فلترة الأخبار العاجلة" />
+              <div className="space-y-3 col-span-full">
+                <Label className="text-sm font-bold uppercase tracking-widest text-primary/70">اسم البروتوكول</Label>
+                <Input {...form.register("name")} className="h-14 rounded-2xl bg-muted/30 border-muted-foreground/10 focus:bg-background transition-all text-lg text-right" placeholder="مثال: فلترة الأخبار العاجلة" />
+              </div>
+
+              <div className="space-y-3 col-span-full">
+                <Label className="text-sm font-bold uppercase tracking-widest text-primary/70">العقدة المرتبطة (Node)</Label>
+                <Controller
+                  control={form.control}
+                  name="sessionId"
+                  render={({ field }) => (
+                    <Select onValueChange={(val) => field.onChange(parseInt(val))} value={field.value?.toString()}>
+                      <SelectTrigger className="h-14 rounded-2xl bg-muted/30 border-muted-foreground/10 flex-row-reverse">
+                        <SelectValue placeholder="اختر جلسة الربط" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-2xl border-primary/10 text-right">
+                        {sessions?.map(s => (
+                          <SelectItem key={s.id} value={s.id.toString()} className="rounded-xl my-1 flex-row-reverse">{s.sessionName} ({s.phoneNumber})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
+
+              <div className="space-y-3">
+                <Label className="text-sm font-bold uppercase tracking-widest text-primary/70">القنوات المصدر</Label>
+                <Controller
+                  control={form.control}
+                  name="sourceChannels"
+                  render={({ field }) => (
+                    <Input 
+                      value={field.value?.join(", ") || ""} 
+                      onChange={(e) => field.onChange(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                      className="h-14 rounded-2xl bg-muted/30 border-muted-foreground/10 font-mono text-sm text-right" 
+                      placeholder="@source1, @source2" 
+                    />
+                  )}
+                />
+              </div>
+
+              <div className="space-y-3">
+                <Label className="text-sm font-bold uppercase tracking-widest text-primary/70">القنوات المستهدفة</Label>
+                <Controller
+                  control={form.control}
+                  name="destinationChannels"
+                  render={({ field }) => (
+                    <Input 
+                      value={field.value?.join(", ") || ""} 
+                      onChange={(e) => field.onChange(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                      className="h-14 rounded-2xl bg-muted/30 border-muted-foreground/10 font-mono text-sm text-right" 
+                      placeholder="@target_channel" 
+                    />
+                  )}
+                />
+              </div>
             </div>
 
-            <div className="space-y-3 col-span-full">
-              <Label className="text-sm font-bold uppercase tracking-widest text-primary/70">العقدة المرتبطة (Node)</Label>
-              <Controller
-                control={form.control}
-                name="sessionId"
-                render={({ field }) => (
-                  <Select onValueChange={(val) => field.onChange(parseInt(val))} value={field.value?.toString()}>
-                    <SelectTrigger className="h-14 rounded-2xl bg-muted/30 border-muted-foreground/10 flex-row-reverse">
-                      <SelectValue placeholder="اختر جلسة الربط" />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-2xl border-primary/10 text-right">
-                      {sessions?.map(s => (
-                        <SelectItem key={s.id} value={s.id.toString()} className="rounded-xl my-1 flex-row-reverse">{s.sessionName} ({s.phoneNumber})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </div>
-
-            <div className="space-y-3">
-              <Label className="text-sm font-bold uppercase tracking-widest text-primary/70">القنوات المصدر</Label>
-              <Controller
-                control={form.control}
-                name="sourceChannels"
-                render={({ field }) => (
-                  <Input 
-                    value={field.value?.join(", ") || ""} 
-                    onChange={(e) => field.onChange(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
-                    className="h-14 rounded-2xl bg-muted/30 border-muted-foreground/10 font-mono text-sm text-right" 
-                    placeholder="@source1, @source2" 
-                  />
-                )}
-              />
-            </div>
-
-            <div className="space-y-3">
-              <Label className="text-sm font-bold uppercase tracking-widest text-primary/70">القنوات المستهدفة</Label>
-              <Controller
-                control={form.control}
-                name="destinationChannels"
-                render={({ field }) => (
-                  <Input 
-                    value={field.value?.join(", ") || ""} 
-                    onChange={(e) => field.onChange(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
-                    className="h-14 rounded-2xl bg-muted/30 border-muted-foreground/10 font-mono text-sm text-right" 
-                    placeholder="@target_channel" 
-                  />
-                )}
-              />
-            </div>
-          </div>
-
-          <Accordion type="multiple" className="w-full space-y-4 text-right">
-            <AccordionItem value="media-filters" className="border rounded-3xl bg-muted/20 px-6 overflow-hidden border-primary/5 shadow-inner">
-              <AccordionTrigger className="hover:no-underline py-6 font-black text-xl text-primary flex gap-3 flex-row-reverse">
-                <div className="p-2 bg-primary/10 rounded-xl"><Filter className="w-5 h-5" /></div>
-                فلاتر الوسائط الشاملة
-              </AccordionTrigger>
-              <AccordionContent className="pb-8 pt-4">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {mediaTypes.map((type) => (
-                    <div key={type.key} className="flex items-center justify-between p-4 rounded-2xl bg-background/50 border border-primary/5 hover:border-primary/20 transition-all group flex-row-reverse">
-                      <div className="flex items-center gap-3 flex-row-reverse">
-                        <div className="p-2 bg-muted rounded-lg group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-                          <type.icon className="w-4 h-4" />
-                        </div>
-                        <span className="text-sm font-bold">{type.label}</span>
+            <Accordion type="multiple" defaultValue={["ai-filters"]} className="w-full space-y-4 text-right">
+              <AccordionItem value="ai-filters" className="border rounded-3xl bg-muted/20 px-6 overflow-hidden border-blue-500/10 shadow-inner">
+                <AccordionTrigger className="hover:no-underline py-6 font-black text-xl text-blue-500 flex gap-3 flex-row-reverse">
+                  <div className="p-2 bg-blue-500/10 rounded-xl"><Brain className="w-5 h-5" /></div>
+                  فلاتر الذكاء الاصطناعي (AI Rules)
+                </AccordionTrigger>
+                <AccordionContent className="pb-8 pt-4 space-y-8">
+                  <div className="flex items-center justify-between bg-background/50 p-6 rounded-2xl border border-blue-500/10 flex-row-reverse">
+                    <div className="flex items-center gap-4 flex-row-reverse">
+                      <div className="space-y-1">
+                        <Label className="text-base font-bold">تفعيل التصفية الذكية</Label>
+                        <p className="text-xs text-muted-foreground">سيتم فحص محتوى الرسائل وتحليلها برمجياً</p>
                       </div>
                       <Controller
                         control={form.control}
-                        name={`filters.mediaTypes.${type.key}`}
+                        name="filters.aiFilters.isEnabled"
                         render={({ field }) => (
                           <Switch 
-                            checked={!!field.value} 
-                            onCheckedChange={(val) => field.onChange(val)}
-                            className="scale-75 data-[state=checked]:bg-primary" 
+                            checked={field.value} 
+                            onCheckedChange={field.onChange}
+                            className="data-[state=checked]:bg-blue-500" 
                           />
                         )}
                       />
                     </div>
-                  ))}
-                </div>
-              </AccordionContent>
-            </AccordionItem>
 
-            <AccordionItem value="content-filters" className="border rounded-3xl bg-muted/20 px-6 overflow-hidden border-primary/5 shadow-inner">
-              <AccordionTrigger className="hover:no-underline py-6 font-black text-xl text-primary flex gap-3 flex-row-reverse">
-                <div className="p-2 bg-primary/10 rounded-xl"><Settings className="w-5 h-5" /></div>
-                تخصيص المحتوى والكلمات
-              </AccordionTrigger>
-              <AccordionContent className="pb-8 pt-4 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-3">
-                    <Label className="text-xs font-black uppercase text-muted-foreground tracking-widest">الكلمات المطلوبة</Label>
-                    <Controller
-                      control={form.control}
-                      name="filters.keywords"
-                      render={({ field }) => (
-                        <Input 
-                          value={field.value?.join(", ") || ""} 
-                          onChange={(e) => field.onChange(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
-                          placeholder="عاجل، حصري، مباشر" 
-                          className="rounded-xl h-12 bg-background/50 text-right" 
-                        />
-                      )}
-                    />
+                    <div className="flex gap-4">
+                      <Controller
+                        control={form.control}
+                        name="filters.aiFilters.mode"
+                        render={({ field }) => (
+                          <div className="flex gap-2 bg-muted p-1 rounded-xl">
+                            <Button 
+                              type="button"
+                              variant={field.value === 'whitelist' ? 'default' : 'ghost'}
+                              size="sm"
+                              className={`rounded-lg font-bold gap-2 ${field.value === 'whitelist' ? 'bg-green-500 hover:bg-green-600' : ''}`}
+                              onClick={() => field.onChange('whitelist')}
+                            >
+                              <CheckCircle2 className="w-4 h-4" /> القائمة البيضاء
+                            </Button>
+                            <Button 
+                              type="button"
+                              variant={field.value === 'blacklist' ? 'default' : 'ghost'}
+                              size="sm"
+                              className={`rounded-lg font-bold gap-2 ${field.value === 'blacklist' ? 'bg-red-500 hover:bg-red-600' : ''}`}
+                              onClick={() => field.onChange('blacklist')}
+                            >
+                              <XCircle className="w-4 h-4" /> القائمة السوداء
+                            </Button>
+                          </div>
+                        )}
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-3">
-                    <Label className="text-xs font-black uppercase text-muted-foreground tracking-widest">الكلمات المستبعدة</Label>
-                    <Controller
-                      control={form.control}
-                      name="filters.excludeKeywords"
-                      render={({ field }) => (
-                        <Input 
-                          value={field.value?.join(", ") || ""} 
-                          onChange={(e) => field.onChange(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
-                          placeholder="إعلان، ممول، ترويجي" 
-                          className="rounded-xl h-12 bg-background/50 text-right" 
-                        />
-                      )}
-                    />
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label className="font-bold">مزود الخدمة</Label>
+                      <Controller
+                        control={form.control}
+                        name="filters.aiFilters.provider"
+                        render={({ field }) => (
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <SelectTrigger className="rounded-xl flex-row-reverse"><SelectValue /></SelectTrigger>
+                            <SelectContent className="text-right">
+                              <SelectItem value="openai">OpenAI</SelectItem>
+                              <SelectItem value="anthropic">Anthropic</SelectItem>
+                              <SelectItem value="groq">Groq (أداء سريع)</SelectItem>
+                              <SelectItem value="gemini">Google Gemini</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold">الموديل (Model)</Label>
+                      <Input {...form.register("filters.aiFilters.model")} className="rounded-xl text-right" placeholder="gpt-4o-mini" />
+                    </div>
                   </div>
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between flex-row-reverse">
+                      <Label className="text-lg font-bold flex items-center gap-2">قواعد التحليل <Sparkles className="w-4 h-4 text-blue-400" /></Label>
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => append({ name: "", instruction: "", isActive: true, priority: fields.length })}
+                        className="rounded-lg gap-2 border-blue-500/20 text-blue-500 hover:bg-blue-500/5"
+                      >
+                        <Plus className="w-4 h-4" /> إضافة قاعدة
+                      </Button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {fields.map((field, index) => (
+                        <div key={field.id} className="p-6 bg-background rounded-2xl border border-blue-500/5 space-y-4 relative group">
+                          <div className="flex items-center justify-between flex-row-reverse">
+                            <div className="flex items-center gap-3 flex-row-reverse">
+                              <span className="bg-blue-500/10 text-blue-500 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">{index + 1}</span>
+                              <Input {...form.register(`filters.aiFilters.rules.${index}.name`)} className="h-9 rounded-lg border-none bg-muted/50 font-bold" placeholder="اسم القاعدة (مثال: كشف الإعلانات)" />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Controller
+                                control={form.control}
+                                name={`filters.aiFilters.rules.${index}.isActive`}
+                                render={({ field }) => (
+                                  <Switch checked={field.value} onCheckedChange={field.onChange} className="scale-75 data-[state=checked]:bg-green-500" />
+                                )}
+                              />
+                              <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="text-destructive hover:bg-destructive/10">
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          <Textarea 
+                            {...form.register(`filters.aiFilters.rules.${index}.instruction`)} 
+                            className="min-h-[80px] rounded-xl bg-muted/20 border-none text-right" 
+                            placeholder="اشرح للذكاء الاصطناعي ما يجب البحث عنه في الرسالة... (مثال: أي رسالة تحتوي على روابط تسويقية أو أسعار لمنتجات تجارية)" 
+                          />
+                        </div>
+                      ))}
+                      {fields.length === 0 && (
+                        <div className="py-12 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center text-muted-foreground gap-2">
+                          <AlertTriangle className="w-8 h-8 opacity-20" />
+                          <p>لا توجد قواعد تحليل بعد. أضف قاعدة لتبدأ.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="media-filters" className="border rounded-3xl bg-muted/20 px-6 overflow-hidden border-primary/5 shadow-inner">
+                <AccordionTrigger className="hover:no-underline py-6 font-black text-xl text-primary flex gap-3 flex-row-reverse">
+                  <div className="p-2 bg-primary/10 rounded-xl"><Filter className="w-5 h-5" /></div>
+                  فلاتر الوسائط الشاملة
+                </AccordionTrigger>
+                <AccordionContent className="pb-8 pt-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {mediaTypes.map((type) => (
+                      <div key={type.key} className="flex items-center justify-between p-4 rounded-2xl bg-background/50 border border-primary/5 hover:border-primary/20 transition-all group flex-row-reverse">
+                        <div className="flex items-center gap-3 flex-row-reverse">
+                          <div className="p-2 bg-muted rounded-lg group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                            <type.icon className="w-4 h-4" />
+                          </div>
+                          <span className="text-sm font-bold">{type.label}</span>
+                        </div>
+                        <Controller
+                          control={form.control}
+                          name={`filters.mediaTypes.${type.key}`}
+                          render={({ field }) => (
+                            <Switch 
+                              checked={!!field.value} 
+                              onCheckedChange={(val) => field.onChange(val)}
+                              className="scale-75 data-[state=checked]:bg-primary" 
+                            />
+                          )}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           </form>
         </div>
 
@@ -453,7 +556,7 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
             className="w-full h-16 font-black text-xl rounded-2xl shadow-2xl shadow-primary/40 transition-all hover:scale-[1.01] active:scale-[0.99]"
           >
             {create.isPending || update.isPending ? <Loader2 className="w-6 h-6 animate-spin me-2" /> : <Settings2 className="w-6 h-6 me-2" />}
-            تثبيت البروتوكول والتشغيل
+            تثبيت البروتوكول والتشغيل الذكي
           </Button>
         </div>
       </DialogContent>
