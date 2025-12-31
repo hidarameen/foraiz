@@ -539,7 +539,19 @@ client.addEventHandler(async (event: any) => {
 export async function startAllMessageListeners() {
   console.log("[Listener] Starting all message listeners for active sessions");
   const sessions = await storage.getSessions();
-  const activeSessions = sessions.filter(s => s.isActive);
+  const tasks = await storage.getTasks();
+  
+  // Get unique session IDs that have at least one active task
+  const activeTaskSessionIds = new Set(
+    tasks.filter(t => t.isActive).map(t => t.sessionId)
+  );
+
+  const activeSessions = sessions.filter(s => s.isActive && activeTaskSessionIds.has(s.id));
+
+  if (activeSessions.length === 0) {
+    console.log("[Listener] No active sessions with active tasks found. Skipping listener start.");
+    return;
+  }
 
   for (const session of activeSessions) {
     try {
