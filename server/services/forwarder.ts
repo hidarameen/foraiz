@@ -333,7 +333,7 @@ ${rulesDescription}
           if (apiKey) {
             console.log(`[Forwarder] Using AI Provider: ${aiFilters.provider}, Model: ${aiFilters.model}`);
             const response = await AIService.chat(aiFilters.provider, aiFilters.model, prompt, apiKey);
-            const decision = response.toUpperCase();
+            const decision = (response as any).message?.toUpperCase() || (response as any).toString().toUpperCase();
             
             console.log(`[Forwarder] AI Decision: ${decision}`);
             
