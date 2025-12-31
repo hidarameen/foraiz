@@ -287,8 +287,29 @@ export class MessageForwarder {
       const type = metadata.type as string;
       const mediaTypes = filters.mediaTypes as Record<string, boolean>;
       
+      // Map telegram media types to our filter keys if needed
+      let filterKey = type;
+      if (metadata.hasMedia && !type) {
+        // Fallback detection logic if type is missing but hasMedia is true
+        if (metadata.rawMessage?.photo) filterKey = "photo";
+        else if (metadata.rawMessage?.video) filterKey = "video";
+        else if (metadata.rawMessage?.document) filterKey = "document";
+        else if (metadata.rawMessage?.audio) filterKey = "audio";
+        else if (metadata.rawMessage?.voice) filterKey = "voice";
+        else if (metadata.rawMessage?.sticker) filterKey = "sticker";
+        else if (metadata.rawMessage?.videoNote) filterKey = "videoNote";
+        else if (metadata.rawMessage?.gif || metadata.rawMessage?.animation) filterKey = "animation";
+        else if (metadata.rawMessage?.poll) filterKey = "poll";
+        else if (metadata.rawMessage?.contact) filterKey = "contact";
+        else if (metadata.rawMessage?.location) filterKey = "location";
+        else if (metadata.rawMessage?.invoice) filterKey = "invoice";
+      } else if (!metadata.hasMedia) {
+        filterKey = "text";
+      }
+
       // إذا كان النوع غير مسموح به، نتخطى الرسالة
-      if (type && mediaTypes[type] === false) {
+      if (filterKey && mediaTypes[filterKey] === false) {
+        console.log(`[Forwarder] Skipping message because media type "${filterKey}" is disabled in filters`);
         return false;
       }
     }

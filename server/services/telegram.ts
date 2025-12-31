@@ -481,6 +481,21 @@ client.addEventHandler(async (event: any) => {
         // IN CHANNELS, THE TEXT IS OFTEN IN message.message
         const messageText = message.message || message.text || "";
         
+        // Detect media type for filtering
+        let mediaType = "text";
+        if (message.photo) mediaType = "photo";
+        else if (message.video) mediaType = "video";
+        else if (message.document) mediaType = "document";
+        else if (message.audio) mediaType = "audio";
+        else if (message.voice) mediaType = "voice";
+        else if (message.sticker) mediaType = "sticker";
+        else if (message.videoNote) mediaType = "videoNote";
+        else if (message.gif || message.animation) mediaType = "animation";
+        else if (message.poll) mediaType = "poll";
+        else if (message.contact) mediaType = "contact";
+        else if (message.location) mediaType = "location";
+        else if (message.invoice) mediaType = "invoice";
+
         // Forward message to destinations using the most reliable method
         try {
           const { forwarder } = await import("./forwarder");
@@ -494,6 +509,7 @@ client.addEventHandler(async (event: any) => {
               originalMessageId: message.id,
               originalText: messageText,
               hasMedia: !!message.media,
+              type: mediaType,
               entities: message.entities,
               rawMessage: message,
               fromChatId: chatId
