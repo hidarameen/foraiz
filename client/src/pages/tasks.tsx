@@ -222,44 +222,52 @@ const DEFAULT_MEDIA_TYPES = {
 };
 
 // Helper function to normalize aiFilters from old/mixed data structures to new format
-function normalizeAIFilters(aiFilters: any) {
-  if (!aiFilters) {
-    return {
-      isEnabled: false,
-      provider: "openai",
-      model: "gpt-4o-mini",
-      mode: "blacklist",
-      blacklistRules: [],
-      whitelistRules: []
+  const normalizeAIFilters = (aiFilters: any) => {
+    if (!aiFilters) {
+      return {
+        isEnabled: false,
+        provider: "openai",
+        model: "gpt-4o-mini",
+        mode: "blacklist",
+        blacklistRules: [],
+        whitelistRules: []
+      };
+    }
+
+    // Start with the new format fields if they exist
+    let blacklistRules = Array.isArray(aiFilters.blacklistRules) ? aiFilters.blacklistRules : [];
+    let whitelistRules = Array.isArray(aiFilters.whitelistRules) ? aiFilters.whitelistRules : [];
+
+    // Filter out any suspicious rules like "خخشخش"
+    const isSuspiciousRule = (rule: any) => {
+      return !rule.name || rule.name === "خخشخش" || rule.name.trim() === "";
     };
-  }
 
-  // Start with the new format fields if they exist
-  let blacklistRules = Array.isArray(aiFilters.blacklistRules) ? aiFilters.blacklistRules : [];
-  let whitelistRules = Array.isArray(aiFilters.whitelistRules) ? aiFilters.whitelistRules : [];
+    blacklistRules = blacklistRules.filter(r => !isSuspiciousRule(r));
+    whitelistRules = whitelistRules.filter(r => !isSuspiciousRule(r));
 
-  // If new format fields are empty, try to migrate from old format
-  if (blacklistRules.length === 0 && aiFilters.blacklist?.rules) {
-    blacklistRules = Array.isArray(aiFilters.blacklist.rules) ? aiFilters.blacklist.rules : [];
-  }
-  if (blacklistRules.length === 0 && Array.isArray(aiFilters.rules)) {
-    blacklistRules = aiFilters.rules;
-  }
+    // If new format fields are empty, try to migrate from old format
+    if (blacklistRules.length === 0 && aiFilters.blacklist?.rules) {
+      blacklistRules = (Array.isArray(aiFilters.blacklist.rules) ? aiFilters.blacklist.rules : []).filter(r => !isSuspiciousRule(r));
+    }
+    if (blacklistRules.length === 0 && Array.isArray(aiFilters.rules)) {
+      blacklistRules = aiFilters.rules.filter(r => !isSuspiciousRule(r));
+    }
 
-  if (whitelistRules.length === 0 && aiFilters.whitelist?.rules) {
-    whitelistRules = Array.isArray(aiFilters.whitelist.rules) ? aiFilters.whitelist.rules : [];
-  }
+    if (whitelistRules.length === 0 && aiFilters.whitelist?.rules) {
+      whitelistRules = (Array.isArray(aiFilters.whitelist.rules) ? aiFilters.whitelist.rules : []).filter(r => !isSuspiciousRule(r));
+    }
 
-  // Return normalized structure
-  return {
-    isEnabled: aiFilters.isEnabled ?? false,
-    provider: aiFilters.provider || "openai",
-    model: aiFilters.model || "gpt-4o-mini",
-    mode: aiFilters.mode || "blacklist",
-    blacklistRules,
-    whitelistRules
+    // Return normalized structure
+    return {
+      isEnabled: aiFilters.isEnabled ?? false,
+      provider: aiFilters.provider || "openai",
+      model: aiFilters.model || "gpt-4o-mini",
+      mode: aiFilters.mode || "blacklist",
+      blacklistRules,
+      whitelistRules
+    };
   };
-}
 
 function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -347,11 +355,13 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
   const onSubmit = (data: any) => {
     // Filter out empty rules (rules without name)
     const filterEmptyRules = (rules: any[]) => {
-      return (rules || []).filter(r => r.name && r.name.trim().length > 0).map((r: any, idx: number) => ({
-        ...r,
-        id: r.id || `rule_${Date.now()}_${idx}`,
-        priority: r.priority ?? idx
-      }));
+      return (rules || [])
+        .filter(r => r.name && r.name.trim().length > 0 && r.name !== "خخشخش")
+        .map((r: any, idx: number) => ({
+          ...r,
+          id: r.id || `rule_${Date.now()}_${idx}`,
+          priority: r.priority ?? idx
+        }));
     };
 
     const payload = {
