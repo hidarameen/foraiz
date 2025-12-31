@@ -221,6 +221,46 @@ const DEFAULT_MEDIA_TYPES = {
   poll: true, contact: true, location: true, invoice: true
 };
 
+// Helper function to normalize aiFilters from old/mixed data structures to new format
+function normalizeAIFilters(aiFilters: any) {
+  if (!aiFilters) {
+    return {
+      isEnabled: false,
+      provider: "openai",
+      model: "gpt-4o-mini",
+      mode: "blacklist",
+      blacklistRules: [],
+      whitelistRules: []
+    };
+  }
+
+  // Start with the new format fields if they exist
+  let blacklistRules = Array.isArray(aiFilters.blacklistRules) ? aiFilters.blacklistRules : [];
+  let whitelistRules = Array.isArray(aiFilters.whitelistRules) ? aiFilters.whitelistRules : [];
+
+  // If new format fields are empty, try to migrate from old format
+  if (blacklistRules.length === 0 && aiFilters.blacklist?.rules) {
+    blacklistRules = Array.isArray(aiFilters.blacklist.rules) ? aiFilters.blacklist.rules : [];
+  }
+  if (blacklistRules.length === 0 && Array.isArray(aiFilters.rules)) {
+    blacklistRules = aiFilters.rules;
+  }
+
+  if (whitelistRules.length === 0 && aiFilters.whitelist?.rules) {
+    whitelistRules = Array.isArray(aiFilters.whitelist.rules) ? aiFilters.whitelist.rules : [];
+  }
+
+  // Return normalized structure
+  return {
+    isEnabled: aiFilters.isEnabled ?? false,
+    provider: aiFilters.provider || "openai",
+    model: aiFilters.model || "gpt-4o-mini",
+    mode: aiFilters.mode || "blacklist",
+    blacklistRules,
+    whitelistRules
+  };
+}
+
 function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const { data: sessions } = useSessions();
@@ -245,14 +285,7 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
       destinationChannels: task?.destinationChannels || [],
       filters: {
         mediaTypes: task?.filters?.mediaTypes || DEFAULT_MEDIA_TYPES,
-        aiFilters: task?.filters?.aiFilters || {
-          isEnabled: false,
-          provider: "openai",
-          model: "gpt-4o-mini",
-          mode: "blacklist",
-          blacklistRules: [],
-          whitelistRules: []
-        }
+        aiFilters: normalizeAIFilters(task?.filters?.aiFilters)
       },
       options: task?.options || { withCaption: true, dropAuthor: false },
       isActive: task?.isActive ?? false
@@ -287,8 +320,9 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
   };
 
   const handleEditRule = (index: number) => {
+    const rule = form.getValues(rulesFieldName)?.[index];
     setEditingRuleIndex(index);
-    setTempRule(fields[index]);
+    setTempRule({ ...rule });
     setRuleDialogOpen(true);
   };
 
