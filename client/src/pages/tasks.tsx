@@ -262,10 +262,36 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
   const availableModels = aiConfig?.[selectedProvider]?.models || [];
   const activeProviders = aiSettings?.filter(s => s.isActive).map(s => s.provider) || [];
 
-  const { fields, append, remove } = useFieldArray({
-    control: form.control,
-    name: "filters.aiFilters.rules"
-  });
+  const [editingRuleIndex, setEditingRuleIndex] = useState<number | null>(null);
+  const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
+  const [tempRule, setTempRule] = useState<any>({ name: "", instruction: "", isActive: true });
+
+  const handleAddRule = () => {
+    setEditingRuleIndex(null);
+    setTempRule({ name: "", instruction: "", isActive: true });
+    setRuleDialogOpen(true);
+  };
+
+  const handleEditRule = (index: number) => {
+    setEditingRuleIndex(index);
+    setTempRule(fields[index]);
+    setRuleDialogOpen(true);
+  };
+
+  const saveRule = () => {
+    if (editingRuleIndex !== null) {
+      updateRule(editingRuleIndex, tempRule);
+    } else {
+      append(tempRule);
+    }
+    setRuleDialogOpen(false);
+  };
+
+  const updateRule = (index: number, value: any) => {
+    const rules = [...form.getValues("filters.aiFilters.rules")];
+    rules[index] = value;
+    form.setValue("filters.aiFilters.rules", rules);
+  };
 
   const onSubmit = (data: any) => {
     const payload = {
@@ -510,43 +536,96 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
                   <div className="space-y-4">
                     <div className="flex items-center justify-between flex-row-reverse">
                       <Label className="text-lg font-bold flex items-center gap-2">قواعد التحليل <Sparkles className="w-4 h-4 text-blue-400" /></Label>
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => append({ name: "", instruction: "", isActive: true, priority: fields.length })}
-                        className="rounded-lg gap-2 border-blue-500/20 text-blue-500 hover:bg-blue-500/5"
-                      >
-                        <Plus className="w-4 h-4" /> إضافة قاعدة
-                      </Button>
+                      <Dialog open={ruleDialogOpen} onOpenChange={setRuleDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={handleAddRule}
+                            className="rounded-lg gap-2 border-blue-500/20 text-blue-500 hover:bg-blue-500/5"
+                          >
+                            <Plus className="w-4 h-4" /> إضافة قاعدة
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-md text-right" dir="rtl">
+                          <DialogTitle className="text-xl font-bold border-b pb-4 text-right">
+                            {editingRuleIndex !== null ? "تعديل قاعدة ذكية" : "إضافة قاعدة ذكية جديدة"}
+                          </DialogTitle>
+                          <div className="space-y-4 py-4">
+                            <div className="space-y-2">
+                              <Label className="font-bold">اسم القاعدة</Label>
+                              <Input 
+                                value={tempRule.name} 
+                                onChange={(e) => setTempRule({...tempRule, name: e.target.value})}
+                                placeholder="مثال: فلترة الإعلانات"
+                                className="text-right"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="font-bold">التعليمات (Prompt)</Label>
+                              <Textarea 
+                                value={tempRule.instruction} 
+                                onChange={(e) => setTempRule({...tempRule, instruction: e.target.value})}
+                                placeholder="اشرح للذكاء الاصطناعي ما يجب فعله بهذه القاعدة..."
+                                className="min-h-[100px] text-right"
+                              />
+                            </div>
+                            <div className="flex items-center justify-between bg-muted/30 p-3 rounded-xl border flex-row-reverse">
+                              <Label className="font-bold">تفعيل القاعدة</Label>
+                              <Switch 
+                                checked={tempRule.isActive} 
+                                onCheckedChange={(checked) => setTempRule({...tempRule, isActive: checked})}
+                              />
+                            </div>
+                          </div>
+                          <div className="flex justify-end gap-3 pt-4 border-t flex-row-reverse">
+                            <Button type="button" onClick={saveRule} className="bg-blue-500 hover:bg-blue-600 px-8">
+                              {editingRuleIndex !== null ? "حفظ التعديلات" : "إضافة القاعدة"}
+                            </Button>
+                            <Button type="button" variant="ghost" onClick={() => setRuleDialogOpen(false)}>إلغاء</Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
                     </div>
 
                     <div className="space-y-4">
                       {fields.map((field, index) => (
-                        <div key={field.id} className="p-6 bg-background rounded-2xl border border-blue-500/5 space-y-4 relative group">
+                        <div key={field.id} className="p-4 bg-background rounded-2xl border border-blue-500/5 space-y-3 relative group hover:border-blue-500/20 transition-all">
                           <div className="flex items-center justify-between flex-row-reverse">
                             <div className="flex items-center gap-3 flex-row-reverse">
                               <span className="bg-blue-500/10 text-blue-500 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">{index + 1}</span>
-                              <Input {...form.register(`filters.aiFilters.rules.${index}.name`)} className="h-9 rounded-lg border-none bg-muted/50 font-bold" placeholder="اسم القاعدة (مثال: كشف الإعلانات)" />
+                              <span className="font-bold text-sm">{field.name || "قاعدة بدون اسم"}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Controller
-                                control={form.control}
-                                name={`filters.aiFilters.rules.${index}.isActive`}
-                                render={({ field }) => (
-                                  <Switch checked={field.value} onCheckedChange={field.onChange} className="scale-75 data-[state=checked]:bg-green-500" />
-                                )}
-                              />
-                              <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="text-destructive hover:bg-destructive/10">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 rounded-lg text-blue-500 hover:bg-blue-500/10"
+                                onClick={() => handleEditRule(index)}
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </Button>
+                              <Button 
+                                type="button" 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={() => remove(index)} 
+                                className="h-8 w-8 p-0 rounded-lg text-destructive hover:bg-destructive/10"
+                              >
                                 <Trash2 className="w-4 h-4" />
                               </Button>
+                              <Switch 
+                                checked={field.isActive} 
+                                onCheckedChange={(checked) => updateRule(index, { ...field, isActive: checked })} 
+                                className="scale-75 data-[state=checked]:bg-green-500 ml-2" 
+                              />
                             </div>
                           </div>
-                          <Textarea 
-                            {...form.register(`filters.aiFilters.rules.${index}.instruction`)} 
-                            className="min-h-[80px] rounded-xl bg-muted/20 border-none text-right" 
-                            placeholder="اشرح للذكاء الاصطناعي ما يجب البحث عنه في الرسالة... (مثال: أي رسالة تحتوي على روابط تسويقية أو أسعار لمنتجات تجارية)" 
-                          />
+                          <p className="text-xs text-muted-foreground line-clamp-2 text-right bg-muted/20 p-2 rounded-lg italic">
+                            {field.instruction || "لا توجد تعليمات مضافة لهذه القاعدة"}
+                          </p>
                         </div>
                       ))}
                       {fields.length === 0 && (
