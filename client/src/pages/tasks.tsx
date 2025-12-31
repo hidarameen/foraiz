@@ -262,6 +262,11 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
   const availableModels = aiConfig?.[selectedProvider]?.models || [];
   const activeProviders = aiSettings?.filter(s => s.isActive).map(s => s.provider) || [];
 
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "filters.aiFilters.rules"
+  });
+
   const [editingRuleIndex, setEditingRuleIndex] = useState<number | null>(null);
   const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
   const [tempRule, setTempRule] = useState<any>({ name: "", instruction: "", isActive: true });
