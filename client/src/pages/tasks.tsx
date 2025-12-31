@@ -240,11 +240,11 @@ const DEFAULT_MEDIA_TYPES = {
 
     // Filter out any suspicious rules like "خخشخش"
     const isSuspiciousRule = (rule: any) => {
-      return !rule.name || rule.name === "خخشخش" || rule.name.trim() === "";
+      return !rule || !rule.name || rule.name === "خخشخش" || rule.name.trim() === "";
     };
 
-    blacklistRules = blacklistRules.filter(r => !isSuspiciousRule(r));
-    whitelistRules = whitelistRules.filter(r => !isSuspiciousRule(r));
+    blacklistRules = (blacklistRules || []).filter(r => !isSuspiciousRule(r));
+    whitelistRules = (whitelistRules || []).filter(r => !isSuspiciousRule(r));
 
     // If new format fields are empty, try to migrate from old format
     if (blacklistRules.length === 0 && aiFilters.blacklist?.rules) {
