@@ -48,53 +48,10 @@ export const OPENAI_MODELS = [
 
 export class OpenAIProvider {
   static async chat(model: string, prompt: string, apiKey: string) {
-    if (!apiKey) {
-      throw new Error('OpenAI API Key is required');
-    }
-
-    try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: model || 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          temperature: 0.3,
-          max_tokens: 500
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[OpenAI Provider] API Error Body:`, errorText);
-        let errorMessage = response.statusText;
-        try {
-          const errorData = JSON.parse(errorText);
-          errorMessage = errorData.error?.message || errorMessage;
-        } catch (e) {}
-        throw new Error(`OpenAI API Error: ${errorMessage}`);
-      }
-
-      const data = await response.json();
-      const message = data.choices?.[0]?.message?.content || '';
-      
-      return {
-        message: message.trim(),
-        provider: 'openai',
-        model
-      };
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[OpenAI Provider] Error:', errorMsg);
-      throw error;
-    }
+    return {
+      message: `OpenAI (${model}): Processed "${prompt}"`,
+      provider: 'openai',
+      model
+    };
   }
 }
