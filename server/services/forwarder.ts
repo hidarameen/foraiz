@@ -47,7 +47,7 @@ export class MessageForwarder {
       try {
         // التحقق من الفلاتر الخاصة بالمهمة
         const filters = task.filters as any;
-        if (content && !this.applyFilters(content, filters)) {
+        if (!this.applyFilters(content, filters, metadata)) {
           console.log(`[Forwarder] Message ${messageId} skipped by filters for task "${task.name}"`);
           
           await storage.createLog({
@@ -277,24 +277,38 @@ export class MessageForwarder {
    */
   applyFilters(
     content: string,
-    filters?: Record<string, any>
+    filters?: Record<string, any>,
+    metadata?: Record<string, any>
   ): boolean {
     if (!filters) return true;
 
-    // فلتر الكلمات المفتاحية
-    if (filters.keywords && filters.keywords.length > 0) {
-      const hasKeyword = filters.keywords.some(
-        (keyword: string) => content.toLowerCase().includes(keyword.toLowerCase())
-      );
-      if (!hasKeyword) return false;
+    // فحص نوع الوسائط
+    if (filters.mediaTypes && metadata) {
+      const type = metadata.type as string;
+      const mediaTypes = filters.mediaTypes as Record<string, boolean>;
+      
+      // إذا كان النوع غير مسموح به، نتخطى الرسالة
+      if (type && mediaTypes[type] === false) {
+        return false;
+      }
     }
 
-    // استبعاد الكلمات
-    if (filters.excludeKeywords && filters.excludeKeywords.length > 0) {
-      const hasExcludedKeyword = filters.excludeKeywords.some(
-        (keyword: string) => content.toLowerCase().includes(keyword.toLowerCase())
-      );
-      if (hasExcludedKeyword) return false;
+    // فلتر الكلمات المفتاحية (فقط للرسائل النصية أو التي تحتوي على نص)
+    if (content) {
+      if (filters.keywords && filters.keywords.length > 0) {
+        const hasKeyword = filters.keywords.some(
+          (keyword: string) => content.toLowerCase().includes(keyword.toLowerCase())
+        );
+        if (!hasKeyword) return false;
+      }
+
+      // استبعاد الكلمات
+      if (filters.excludeKeywords && filters.excludeKeywords.length > 0) {
+        const hasExcludedKeyword = filters.excludeKeywords.some(
+          (keyword: string) => content.toLowerCase().includes(keyword.toLowerCase())
+        );
+        if (hasExcludedKeyword) return false;
+      }
     }
 
     return true;

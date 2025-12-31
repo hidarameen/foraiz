@@ -48,9 +48,39 @@ export const tasks = pgTable("tasks", {
   filters: jsonb("filters").$type<{
     keywords?: string[];
     excludeKeywords?: string[];
-    mediaTypes?: ("photo" | "video" | "document" | "audio" | "voice" | "sticker")[];
+    mediaTypes?: {
+      text: boolean;
+      photo: boolean;
+      video: boolean;
+      document: boolean;
+      audio: boolean;
+      voice: boolean;
+      sticker: boolean;
+      videoNote: boolean;
+      animation: boolean;
+      poll: boolean;
+      contact: boolean;
+      location: boolean;
+      invoice: boolean;
+    };
     minId?: number;
-  }>().default({}),
+  }>().default({
+    mediaTypes: {
+      text: true,
+      photo: true,
+      video: true,
+      document: true,
+      audio: true,
+      voice: true,
+      sticker: true,
+      videoNote: true,
+      animation: true,
+      poll: true,
+      contact: true,
+      location: true,
+      invoice: true,
+    }
+  }),
   
   // Forwarding Options
   options: jsonb("options").$type<{
