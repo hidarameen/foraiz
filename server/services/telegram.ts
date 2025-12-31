@@ -499,7 +499,7 @@ client.addEventHandler(async (event: any) => {
         // Forward message to destinations using the most reliable method
         try {
           const { forwarder } = await import("./forwarder");
-          console.log(`[Forwarder] 🚀 Forwarding message via task ${task.id} to:`, task.destinationChannels);
+          console.log(`[Forwarder] 🚀 Checking filters for task ${task.id} with content: ${messageText.substring(0, 50)}...`);
           
           await forwarder.forwardMessage(
             task,
@@ -515,7 +515,7 @@ client.addEventHandler(async (event: any) => {
               fromChatId: chatId
             }
           );
-          console.log(`[Forwarder] ✅ Message forwarded via task ${task.id}`);
+          console.log(`[Forwarder] ✅ Message processing completed for task ${task.id}`);
         } catch (err) {
           console.error(`[Forwarder] ❌ Error forwarding message via task ${task.id}:`, err);
         }

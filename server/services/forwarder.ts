@@ -304,14 +304,15 @@ export class MessageForwarder {
     }
 
     // 2. فلاتر الذكاء الاصطناعي
-    const aiFilters = filters.aiFilters;
+    const aiFilters = filters?.aiFilters;
     if (aiFilters?.isEnabled && aiFilters.rules?.length > 0) {
       const activeRules = aiFilters.rules
         .filter((r: any) => r.isActive)
         .sort((a: any, b: any) => (a.priority || 0) - (b.priority || 0));
 
-      if (activeRules.length > 0 && (content || metadata?.originalText)) {
-        const textToAnalyze = content || metadata?.originalText || "";
+      const textToAnalyze = content || metadata?.originalText || "";
+
+      if (activeRules.length > 0 && textToAnalyze.trim().length > 0) {
         const rulesDescription = activeRules.map((r: any) => `- ${r.name}: ${r.instruction}`).join('\n');
         
         const prompt = `أنت مساعد ذكي مهمتك فحص محتوى الرسائل وتحديد ما إذا كانت تطابق القواعد المحددة.
