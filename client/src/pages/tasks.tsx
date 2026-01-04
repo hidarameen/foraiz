@@ -139,7 +139,12 @@ export default function TasksPage() {
                           </div>
                           {(task.filters as any)?.aiFilters?.isEnabled && (
                             <div className="px-3 py-1 rounded-full text-xs font-bold bg-blue-500/20 text-blue-400 flex items-center gap-1">
-                              <Brain className="w-3 h-3" /> ذكاء اصطناعي
+                              <Brain className="w-3 h-3" /> فلترة ذكية
+                            </div>
+                          )}
+                          {(task.options as any)?.aiRewrite?.isEnabled && (
+                            <div className="px-3 py-1 rounded-full text-xs font-bold bg-purple-500/20 text-purple-400 flex items-center gap-1">
+                              <Sparkles className="w-3 h-3" /> إعادة صياغة
                             </div>
                           )}
                         </div>
