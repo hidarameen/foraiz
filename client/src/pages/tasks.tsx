@@ -125,7 +125,11 @@ export default function TasksPage() {
                     
                     <div className="flex items-center gap-6 flex-1">
                       <div className={`p-5 rounded-2xl border-2 transition-all duration-500 ${task.isActive ? 'bg-primary/20 border-primary/30 text-primary shadow-2xl shadow-primary/20 scale-105' : 'bg-muted/50 border-muted-foreground/10 text-muted-foreground'}`}>
-                        {task.isActive ? <Play className="w-8 h-8 fill-current animate-pulse" /> : <Pause className="w-8 h-8" />}
+                        {toggleTask.isPending && toggleTask.variables?.id === task.id ? (
+                          <Loader2 className="w-8 h-8 animate-spin" />
+                        ) : (
+                          task.isActive ? <Play className="w-8 h-8 fill-current animate-pulse" /> : <Pause className="w-8 h-8" />
+                        )}
                       </div>
                       <div className="space-y-2 text-right">
                         <div className="flex items-center gap-3 justify-start md:justify-end flex-row-reverse">
@@ -156,11 +160,11 @@ export default function TasksPage() {
                       <div className="flex flex-col items-center lg:items-start gap-2">
                         <span className="text-xs uppercase tracking-widest text-muted-foreground font-bold opacity-60">الحالة التشغيلية</span>
                         <div className="flex items-center gap-2">
-                          {toggleTask.isPending && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
+                          {toggleTask.isPending && toggleTask.variables?.id === task.id && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
                           <Switch 
                             checked={task.isActive || false}
                             onCheckedChange={() => handleToggle(task.id, task.isActive || false)}
-                            disabled={toggleTask.isPending}
+                            disabled={toggleTask.isPending && toggleTask.variables?.id === task.id}
                             className="data-[state=checked]:bg-primary"
                           />
                         </div>
@@ -186,8 +190,13 @@ export default function TasksPage() {
                           size="icon" 
                           className="rounded-xl hover:bg-destructive/20 hover:text-destructive transition-all shadow-sm h-10 w-10"
                           onClick={() => handleDelete(task.id)}
+                          disabled={deleteTask.isPending && deleteTask.variables === task.id}
                         >
-                          <Trash2 className="w-5 h-5" />
+                          {deleteTask.isPending && deleteTask.variables === task.id ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-5 h-5" />
+                          )}
                         </Button>
                       </div>
                     </div>
