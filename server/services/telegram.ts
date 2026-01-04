@@ -402,7 +402,17 @@ export async function resolveChannelId(sessionId: number, identifier: string): P
     // 2. Handle Public Links and Usernames
     const cleanIdentifier = identifier.replace("https://t.me/", "").replace("@", "");
     const entity = await client.getEntity(cleanIdentifier);
-    return entity.id.toString();
+    
+    // GramJS returns numeric IDs for channels that need to be prefixed with -100
+    // for most API calls. Let's ensure consistent storage.
+    let resolvedId = entity.id.toString();
+    // For Channels and Supergroups, GramJS often returns the ID without -100 prefix in some contexts
+    // but the listener event gives it with -100 (as a string or bigInt)
+    // We'll store it with -100 prefix if it's a channel/megagroup
+    if ((entity instanceof Api.Channel || entity.className === 'Channel') && !resolvedId.startsWith("-100")) {
+      resolvedId = "-100" + resolvedId;
+    }
+    return resolvedId;
   } catch (err) {
     console.error(`[Telegram] Failed to resolve identifier ${identifier}:`, err);
     // If it looks like a numeric ID already, return it
@@ -492,14 +502,18 @@ client.addEventHandler(async (event: any) => {
                     message.peerId?.userId?.toString() ||
                     message.peerId?.toString();
       
+      // Standardize chatId for comparison
+      const cleanChatId = chatId.replace(/^-100/, "");
+      console.log(`[Listener] 📩 Received message from chat ${chatId} (Clean: ${cleanChatId})`);
+
       // Get active tasks
       const tasks = await storage.getTasks();
       const sessionTasks = tasks.filter(t => t.sessionId === sessionId && t.isActive);
       
-      if (sessionTasks.length === 0) return;
-
-      // Standardize chatId for comparison
-      const cleanChatId = chatId.replace(/^-100/, "");
+      if (sessionTasks.length === 0) {
+        console.log(`[Listener] ⚠️ No active tasks for session ${sessionId}, skipping.`);
+        return;
+      }
 
       // Check each task
       for (const task of sessionTasks) {
@@ -507,9 +521,13 @@ client.addEventHandler(async (event: any) => {
         const currentTask = await storage.getTask(task.id);
         if (!currentTask || !currentTask.isActive) continue;
 
+        console.log(`[Listener] Checking task ${currentTask.id} against sources: ${currentTask.sourceChannels.join(', ')}`);
+
         const matchesChannel = currentTask.sourceChannels.some(sourceId => {
           const cleanSourceId = sourceId.replace(/^-100/, "");
-          return cleanSourceId === cleanChatId;
+          const isMatch = cleanSourceId === cleanChatId;
+          if (isMatch) console.log(`[Listener] ✅ Match found for Task ${currentTask.id}: Source ${cleanSourceId} === Chat ${cleanChatId}`);
+          return isMatch;
         });
 
         if (!matchesChannel) {

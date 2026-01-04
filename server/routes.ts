@@ -467,12 +467,20 @@ export async function registerRoutes(
       const { resolveChannelId } = await import("./services/telegram");
       if (cleanedBody.sourceChannels) {
         cleanedBody.sourceChannels = await Promise.all(
-          cleanedBody.sourceChannels.map((id: string) => resolveChannelId(cleanedBody.sessionId || task.sessionId, id).catch(() => id))
+          cleanedBody.sourceChannels.map((id: string) => {
+            // Already resolved ID
+            if (/^-?\d+$/.test(id)) return id;
+            return resolveChannelId(cleanedBody.sessionId || task.sessionId, id).catch(() => id);
+          })
         );
       }
       if (cleanedBody.destinationChannels) {
         cleanedBody.destinationChannels = await Promise.all(
-          cleanedBody.destinationChannels.map((id: string) => resolveChannelId(cleanedBody.sessionId || task.sessionId, id).catch(() => id))
+          cleanedBody.destinationChannels.map((id: string) => {
+            // Already resolved ID
+            if (/^-?\d+$/.test(id)) return id;
+            return resolveChannelId(cleanedBody.sessionId || task.sessionId, id).catch(() => id);
+          })
         );
       }
 
