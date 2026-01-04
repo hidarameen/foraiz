@@ -321,7 +321,7 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
   const rulesFieldName = currentMode === 'whitelist' ? "filters.aiFilters.whitelistRules" : "filters.aiFilters.blacklistRules";
   const { fields, append, remove } = useFieldArray({
     control: form.control,
-    name: rulesFieldName,
+    name: rulesFieldName as "filters.aiFilters.blacklistRules" | "filters.aiFilters.whitelistRules",
     keyName: `rule_${rulesFieldName}`
   });
 
