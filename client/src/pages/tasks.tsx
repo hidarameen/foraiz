@@ -422,38 +422,43 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
   const [resolveLoading, setResolveLoading] = useState(false);
   const [sourceInput, setSourceInput] = useState("");
   const [sourceTags, setSourceTags] = useState<{id: string, title: string}[]>([]);
+  const [destInput, setDestInput] = useState("");
+  const [destTags, setDestTags] = useState<{id: string, title: string}[]>([]);
 
   useEffect(() => {
-    if (task?.sourceChannels) {
-      setSourceTags(task.sourceChannels.map((id: string) => ({ id, title: id })));
+    if (task) {
+      if (task.sourceChannels) {
+        setSourceTags(task.sourceChannels.map((id: string) => ({ id, title: id })));
+      }
+      if (task.destinationChannels) {
+        setDestTags(task.destinationChannels.map((id: string) => ({ id, title: id })));
+      }
     } else {
       setSourceTags([]);
+      setDestTags([]);
     }
   }, [task, open]);
 
-  const handleResolveSource = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-    // Check for Enter key on desktop or a generic Enter/Done on mobile keyboards
-    if (e.key === "Enter") {
-      e.preventDefault();
-      const identifier = sourceInput.trim();
-      if (!identifier) return;
+  const handleResolve = async (identifier: string, isSource: boolean) => {
+    if (!identifier) return;
 
-      setResolveLoading(true);
-      try {
-        const sessionId = form.getValues("sessionId");
-        if (!sessionId) {
-          toast({ title: "تنبيه", description: "يرجى اختيار العقدة (الجلسة) أولاً", variant: "destructive" });
-          setResolveLoading(false);
-          return;
-        }
+    setResolveLoading(true);
+    try {
+      const sessionId = form.getValues("sessionId");
+      if (!sessionId) {
+        toast({ title: "تنبيه", description: "يرجى اختيار العقدة (الجلسة) أولاً", variant: "destructive" });
+        setResolveLoading(false);
+        return;
+      }
 
-        const res = await fetch(`/api/telegram/resolve?sessionId=${sessionId}&identifier=${encodeURIComponent(identifier)}`);
-        if (!res.ok) {
-          const errData = await res.json();
-          throw new Error(errData.message || "Failed to resolve");
-        }
-        const data = await res.json();
-        
+      const res = await fetch(`/api/telegram/resolve?sessionId=${sessionId}&identifier=${encodeURIComponent(identifier)}`);
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.message || "Failed to resolve");
+      }
+      const data = await res.json();
+      
+      if (isSource) {
         const newTags = [...sourceTags];
         if (!newTags.find(t => t.id === data.id)) {
           newTags.push({ id: data.id, title: data.title });
@@ -463,27 +468,51 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
           toast({ title: "تنبيه", description: "هذه القناة مضافة بالفعل" });
         }
         setSourceInput("");
-      } catch (err: any) {
-        console.error("Resolve error:", err);
-        toast({ title: "خطأ", description: `فشل في جلب معلومات القناة: ${err.message}`, variant: "destructive" });
-      } finally {
-        setResolveLoading(false);
+      } else {
+        const newTags = [...destTags];
+        if (!newTags.find(t => t.id === data.id)) {
+          newTags.push({ id: data.id, title: data.title });
+          setDestTags(newTags);
+          form.setValue("destinationChannels", newTags.map(t => t.id));
+        } else {
+          toast({ title: "تنبيه", description: "هذه القناة مضافة بالفعل" });
+        }
+        setDestInput("");
       }
+    } catch (err: any) {
+      console.error("Resolve error:", err);
+      toast({ title: "خطأ", description: `فشل في جلب معلومات القناة: ${err.message}`, variant: "destructive" });
+    } finally {
+      setResolveLoading(false);
     }
   };
 
-  const removeSourceTag = (id: string) => {
-    const newTags = sourceTags.filter(t => t.id !== id);
-    setSourceTags(newTags);
-    form.setValue("sourceChannels", newTags.map(t => t.id));
+  const removeTag = (id: string, isSource: boolean) => {
+    if (isSource) {
+      const newTags = sourceTags.filter(t => t.id !== id);
+      setSourceTags(newTags);
+      form.setValue("sourceChannels", newTags.map(t => t.id));
+    } else {
+      const newTags = destTags.filter(t => t.id !== id);
+      setDestTags(newTags);
+      form.setValue("destinationChannels", newTags.map(t => t.id));
+    }
   };
 
   const currentSourceChannels = form.watch("sourceChannels");
+  const currentDestChannels = form.watch("destinationChannels");
+
   useEffect(() => {
     if (currentSourceChannels && currentSourceChannels.length !== sourceTags.length) {
        setSourceTags(currentSourceChannels.map((id: string) => ({ id, title: id })));
     }
   }, [currentSourceChannels]);
+
+  useEffect(() => {
+    if (currentDestChannels && currentDestChannels.length !== destTags.length) {
+       setDestTags(currentDestChannels.map((id: string) => ({ id, title: id })));
+    }
+  }, [currentDestChannels]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -538,7 +567,7 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
                     {sourceTags.map(tag => (
                       <div key={tag.id} className="bg-primary/10 text-primary px-3 py-1 rounded-full flex items-center gap-2 text-sm font-bold">
                         <span>{tag.title}</span>
-                        <button type="button" onClick={() => removeSourceTag(tag.id)} className="hover:text-destructive">
+                        <button type="button" onClick={() => removeTag(tag.id, true)} className="hover:text-destructive">
                           <Trash2 className="w-3 h-3" />
                         </button>
                       </div>
@@ -548,7 +577,12 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
                     <Input 
                       value={sourceInput}
                       onChange={(e) => setSourceInput(e.target.value)}
-                      onKeyDown={handleResolveSource}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleResolve(sourceInput, true);
+                        }
+                      }}
                       enterKeyHint="enter"
                       inputMode="text"
                       className="h-14 rounded-2xl bg-muted/30 border-muted-foreground/10 font-mono text-sm text-right" 
@@ -562,18 +596,36 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
 
               <div className="space-y-3">
                 <Label className="text-sm font-bold uppercase tracking-widest text-primary/70">القنوات المستهدفة</Label>
-                <Controller
-                  control={form.control}
-                  name="destinationChannels"
-                  render={({ field }) => (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-2 mb-2 justify-end">
+                    {destTags.map(tag => (
+                      <div key={tag.id} className="bg-secondary/10 text-secondary px-3 py-1 rounded-full flex items-center gap-2 text-sm font-bold">
+                        <span>{tag.title}</span>
+                        <button type="button" onClick={() => removeTag(tag.id, false)} className="hover:text-destructive">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="relative">
                     <Input 
-                      value={field.value?.join(", ") || ""} 
-                      onChange={(e) => field.onChange(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                      value={destInput}
+                      onChange={(e) => setDestInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleResolve(destInput, false);
+                        }
+                      }}
+                      enterKeyHint="enter"
+                      inputMode="text"
                       className="h-14 rounded-2xl bg-muted/30 border-muted-foreground/10 font-mono text-sm text-right" 
-                      placeholder="@target_channel" 
+                      placeholder="أدخل المعرف واضغط Enter" 
+                      disabled={resolveLoading}
                     />
-                  )}
-                />
+                    {resolveLoading && <Loader2 className="w-4 h-4 animate-spin absolute left-4 top-5" />}
+                  </div>
+                </div>
               </div>
             </div>
 
