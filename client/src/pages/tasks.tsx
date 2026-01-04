@@ -313,7 +313,16 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
         mediaTypes: task?.filters?.mediaTypes || DEFAULT_MEDIA_TYPES,
         aiFilters: normalizeAIFilters(task?.filters?.aiFilters)
       },
-      options: task?.options || { withCaption: true, dropAuthor: false },
+      options: task?.options || { 
+        withCaption: true, 
+        dropAuthor: false,
+        aiRewrite: {
+          isEnabled: false,
+          provider: "openai",
+          model: "gpt-4o-mini",
+          rules: []
+        }
+      },
       isActive: task?.isActive ?? false
     }
   });
@@ -880,13 +889,13 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
 
                     <div className="space-y-4">
                       {fields.map((field, index) => {
-                        const rule = form.getValues(rulesFieldName)?.[index];
+                        const rule = (form.getValues(rulesFieldName) as any)?.[index];
                         // Skip empty rules (rules without name)
                         if (!rule?.name || rule.name.trim().length === 0) {
                           return null;
                         }
                         return (
-                        <div key={field.id || index} className="p-4 bg-background rounded-2xl border border-blue-500/5 space-y-3 relative group hover:border-blue-500/20 transition-all">
+                        <div key={field.id} className="p-4 bg-background rounded-2xl border border-blue-500/5 space-y-3 relative group hover:border-blue-500/20 transition-all">
                           <div className="flex items-center justify-between flex-row-reverse">
                             <div className="flex items-center gap-3 flex-row-reverse">
                               <span className="bg-blue-500/10 text-blue-500 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">{index + 1}</span>
@@ -963,6 +972,189 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
                         />
                       </div>
                     ))}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="ai-rewrite" className="border rounded-3xl bg-muted/20 px-6 overflow-hidden border-purple-500/10 shadow-inner">
+                <AccordionTrigger className="hover:no-underline py-6 font-black text-xl text-purple-500 flex gap-3 flex-row-reverse">
+                  <div className="p-2 bg-purple-500/10 rounded-xl"><Sparkles className="w-5 h-5" /></div>
+                  تخصيص الرسالة بالذكاء الاصطناعي (Rewrite)
+                </AccordionTrigger>
+                <AccordionContent className="pb-8 pt-4 space-y-8">
+                  <div className="flex items-center justify-between bg-background/50 p-6 rounded-2xl border border-purple-500/10 flex-row-reverse">
+                    <div className="flex items-center gap-4 flex-row-reverse">
+                      <div className="space-y-1">
+                        <Label className="text-base font-bold">تفعيل إعادة الصياغة</Label>
+                        <p className="text-xs text-muted-foreground">سيتم تعديل نص الرسالة بناءً على قواعدك الخاصة قبل إرسالها</p>
+                      </div>
+                      <Controller
+                        control={form.control}
+                        name="options.aiRewrite.isEnabled"
+                        render={({ field }) => (
+                          <Switch 
+                            checked={field.value} 
+                            onCheckedChange={field.onChange}
+                            className="data-[state=checked]:bg-purple-500" 
+                          />
+                        )}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label className="font-bold">مزود الخدمة</Label>
+                      <Controller
+                        control={form.control}
+                        name="options.aiRewrite.provider"
+                        render={({ field }) => (
+                          <Select 
+                            onValueChange={(val) => {
+                              field.onChange(val);
+                              const providerModels = aiConfig?.[val]?.models || [];
+                              if (providerModels.length > 0) {
+                                form.setValue("options.aiRewrite.model", providerModels[0].id);
+                              }
+                            }} 
+                            value={field.value}
+                          >
+                            <SelectTrigger className="rounded-xl flex-row-reverse">
+                              <SelectValue placeholder="اختر المزود" />
+                            </SelectTrigger>
+                            <SelectContent className="text-right">
+                              {aiConfig && Object.entries(aiConfig).map(([id, p]: [string, any]) => (
+                                <SelectItem key={id} value={id} className="flex-row-reverse gap-2">
+                                  <span>{p.name}</span>
+                                  {!activeProviders.includes(id) && (
+                                    <span className="text-[10px] bg-yellow-500/10 text-yellow-600 px-1.5 py-0.5 rounded ml-2">غير مفعل</span>
+                                  )}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold">الموديل (Model)</Label>
+                      <Controller
+                        control={form.control}
+                        name="options.aiRewrite.model"
+                        render={({ field }) => (
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <SelectTrigger className="rounded-xl flex-row-reverse">
+                              <SelectValue placeholder="اختر الموديل" />
+                            </SelectTrigger>
+                            <SelectContent className="text-right">
+                              {(aiConfig?.[form.watch("options.aiRewrite.provider")]?.models || []).map((m: any) => (
+                                <SelectItem key={m.id} value={m.id} className="flex-row-reverse">{m.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between flex-row-reverse">
+                      <Label className="text-lg font-bold flex items-center gap-2">
+                        قواعد التحرير <Brain className="w-4 h-4 text-purple-400" />
+                      </Label>
+                      <Dialog open={rewriteDialogOpen} onOpenChange={setRewriteDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={handleAddRewriteRule}
+                            className="rounded-lg gap-2 border-purple-500/20 text-purple-500 hover:bg-purple-500/5"
+                          >
+                            <Plus className="w-4 h-4" /> إضافة قاعدة تحرير
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-md text-right" dir="rtl">
+                          <DialogTitle className="text-xl font-bold border-b pb-4 text-right">
+                            {editingRewriteIndex !== null ? "تعديل قاعدة تحرير" : "إضافة قاعدة تحرير جديدة"}
+                          </DialogTitle>
+                          <div className="space-y-4 py-4">
+                            <div className="space-y-2">
+                              <Label className="font-bold">اسم القاعدة</Label>
+                              <Input 
+                                value={tempRewrite.name} 
+                                onChange={(e) => setTempRewrite({...tempRewrite, name: e.target.value})}
+                                placeholder="مثال: حذف الروابط"
+                                className="text-right"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="font-bold">تعليمات التحرير</Label>
+                              <Textarea 
+                                value={tempRewrite.instruction} 
+                                onChange={(e) => setTempRewrite({...tempRewrite, instruction: e.target.value})}
+                                placeholder="مثال: قم بحذف جميع الروابط والمعرفات من النص..."
+                                className="min-h-[100px] text-right"
+                              />
+                            </div>
+                            <div className="flex items-center justify-between bg-muted/30 p-3 rounded-xl border flex-row-reverse">
+                              <Label className="font-bold">تفعيل القاعدة</Label>
+                              <Switch 
+                                checked={tempRewrite.isActive} 
+                                onCheckedChange={(checked) => setTempRewrite({...tempRewrite, isActive: checked})}
+                              />
+                            </div>
+                          </div>
+                          <div className="flex justify-end gap-3 pt-4 border-t flex-row-reverse">
+                            <Button type="button" onClick={saveRewriteRule} className="bg-purple-500 hover:bg-purple-600 px-8">
+                              {editingRewriteIndex !== null ? "حفظ التعديلات" : "إضافة القاعدة"}
+                            </Button>
+                            <Button type="button" variant="ghost" onClick={() => setRewriteDialogOpen(false)}>إلغاء</Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+
+                    <div className="space-y-4">
+                      {rewriteFields.map((field, index) => {
+                        const rule = form.getValues("options.aiRewrite.rules")?.[index];
+                        return (
+                          <div key={field.id} className="p-4 bg-background rounded-2xl border border-purple-500/5 space-y-3 relative group hover:border-purple-500/20 transition-all">
+                            <div className="flex items-center justify-between flex-row-reverse">
+                              <div className="flex items-center gap-3 flex-row-reverse">
+                                <span className="bg-purple-500/10 text-purple-500 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">{index + 1}</span>
+                                <span className="font-bold text-sm">{rule?.name}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditRewriteRule(index)}
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </Button>
+                                <Button 
+                                  type="button" 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  onClick={() => removeRewrite(index)} 
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                                <Switch 
+                                  checked={rule?.isActive} 
+                                  onCheckedChange={(checked) => updateRewriteRule(index, { ...rule, isActive: checked })} 
+                                />
+                              </div>
+                            </div>
+                            <p className="text-xs text-muted-foreground text-right bg-muted/20 p-2 rounded-lg italic">
+                              {rule?.instruction}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </AccordionContent>
               </AccordionItem>

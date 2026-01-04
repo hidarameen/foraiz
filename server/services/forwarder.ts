@@ -109,8 +109,9 @@ ${rewriteRules}
 
               if (apiKey) {
                 const rewritten = await AIService.chat(options.aiRewrite.provider, options.aiRewrite.model, prompt, apiKey);
-                if (typeof rewritten === 'string' && (rewritten as string).trim().length > 0) {
-                  finalContent = (rewritten as string).trim();
+                const rewrittenStr = typeof rewritten === 'string' ? rewritten : (rewritten as any)?.message || "";
+                if (rewrittenStr && rewrittenStr.trim().length > 0) {
+                  finalContent = rewrittenStr.trim();
                   console.log(`[Forwarder] AI Rewrite Success for task ${task.id}. Content length: ${finalContent.length}`);
                 }
               }
