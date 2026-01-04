@@ -498,10 +498,17 @@ client.addEventHandler(async (event: any) => {
       const message = event.message;
       
       // Try multiple ways to get the chat ID
-      const chatId = event.chatId?.toString() || 
-                    message.peerId?.channelId?.toString() ||
-                    message.peerId?.userId?.toString() ||
-                    message.peerId?.toString();
+      const chatIdRaw = event.chatId || 
+                        message.peerId?.channelId ||
+                        message.peerId?.userId ||
+                        message.peerId;
+      
+      if (!chatIdRaw) {
+        console.log(`[Listener] ⚠️ Could not determine chat ID from event`);
+        return;
+      }
+
+      const chatId = chatIdRaw.toString();
       
       // Standardize chatId for comparison
       const cleanChatId = chatId.replace(/^-100/, "");
