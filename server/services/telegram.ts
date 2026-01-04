@@ -409,7 +409,7 @@ export async function resolveChannelId(sessionId: number, identifier: string): P
     // For Channels and Supergroups, GramJS often returns the ID without -100 prefix in some contexts
     // but the listener event gives it with -100 (as a string or bigInt)
     // We'll store it with -100 prefix if it's a channel/megagroup
-    const className = entity.className || (entity as any).constructor?.name || '';
+    const className = entity.className || (entity as any).constructor?.name || (entity as any)._?.replace('Api.', '') || '';
     if ((entity instanceof Api.Channel || entity instanceof Api.Chat || className === 'Channel' || className === 'Chat') && !resolvedId.startsWith("-100") && !resolvedId.startsWith("-")) {
       resolvedId = "-100" + resolvedId;
     }

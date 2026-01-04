@@ -477,6 +477,13 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
     form.setValue("sourceChannels", newTags.map(t => t.id));
   };
 
+  const currentSourceChannels = form.watch("sourceChannels");
+  useEffect(() => {
+    if (currentSourceChannels && currentSourceChannels.length !== sourceTags.length) {
+       setSourceTags(currentSourceChannels.map((id: string) => ({ id, title: id })));
+    }
+  }, [currentSourceChannels]);
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>

@@ -90,7 +90,7 @@ export async function registerRoutes(
       }
       
       let resolvedId = entity.id.toString();
-      const className = entity.className || (entity as any).constructor?.name || '';
+      const className = entity.className || (entity as any).constructor?.name || (entity as any)._?.replace('Api.', '') || '';
       if ((className === 'Channel' || className === 'Chat') && !resolvedId.startsWith("-100") && !resolvedId.startsWith("-")) {
         resolvedId = "-100" + resolvedId;
       }
