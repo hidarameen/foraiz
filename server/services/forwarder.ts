@@ -20,6 +20,62 @@ export interface ForwardingResult {
  */
 export class MessageForwarder {
   /**
+   * إعادة صياغة النص باستخدام الذكاء الاصطناعي
+   */
+  private async rewriteWithAI(
+    task: Task,
+    content: string,
+    provider: string,
+    model: string,
+    rules: any[]
+  ): Promise<string> {
+    if (!content || content.trim().length === 0) return content;
+    
+    const activeRules = rules
+      .filter((r: any) => r && r.isActive && r.name && r.instruction)
+      .map((r: any) => `- ${r.name}: ${r.instruction}`)
+      .join('\n');
+
+    if (activeRules.length === 0) return content;
+
+    console.log(`[Forwarder] AI Rewrite processing message for task ${task.id}`);
+    const prompt = `أنت خبير في إعادة صياغة وتحرير النصوص. مهمتك هي إعادة صياغة الرسالة التالية بناءً على القواعد المحددة.
+يجب أن تحافظ على الجوهر الأساسي للرسالة مع تطبيق التعديلات المطلوبة بدقة.
+
+الرسالة الأصلية: "${content}"
+
+القواعد المطلوبة لإعادة الصياغة:
+${activeRules}
+
+المطلوب منك:
+إعادة صياغة الرسالة بالكامل وتطبيق القواعد عليها، والرد بنص الرسالة الجديد فقط دون أي مقدمات أو شروحات.`;
+
+    try {
+      const allConfigs = await storage.getAIConfigs();
+      let aiConfig = allConfigs.find(c => c.provider === provider && c.isActive);
+      if (!aiConfig) aiConfig = allConfigs.find(c => c.isActive);
+      
+      const apiKey = aiConfig?.apiKey || (aiConfig?.provider ? process.env[`${aiConfig.provider.toUpperCase()}_API_KEY`] : process.env[`${provider.toUpperCase()}_API_KEY`]);
+
+      if (apiKey) {
+        const providerToUse = aiConfig?.provider || provider;
+        console.log(`[Forwarder] AI Rewrite Request - Task: ${task.id}, Provider: ${providerToUse}, Model: ${model}`);
+        const response = await AIService.chat(providerToUse, model, prompt, apiKey);
+        const rewrittenStr = typeof response === 'string' ? response : (response as any)?.message || "";
+        if (rewrittenStr && rewrittenStr.trim().length > 0) {
+          return rewrittenStr.trim();
+        }
+      } else {
+        console.error(`[Forwarder] AI Rewrite skipped: API Key not found for ${provider}`);
+      }
+    } catch (error) {
+      console.error(`[Forwarder] AI Rewrite failed for task ${task.id}:`, error);
+    }
+    
+    return content;
+  }
+
+  /**
    * توجيه رسالة واحدة إلى وجهات متعددة
    */
   async forwardMessage(
@@ -229,9 +285,22 @@ ${rewriteRules}
         }
         
         // Use the media objects directly from the fetched messages
+        const options = task.options as any;
+        let finalCaption = albumCaption;
+        
+        if (options?.aiRewrite?.isEnabled && finalCaption) {
+          finalCaption = await this.rewriteWithAI(
+            task,
+            finalCaption,
+            options.aiRewrite.provider,
+            options.aiRewrite.model,
+            options.aiRewrite.rules || []
+          );
+        }
+
         await client.sendMessage(destination, {
           file: messages.map(msg => msg.media).filter(media => !!media),
-          message: albumCaption,
+          message: finalCaption,
           formattingEntities: albumEntities,
         });
 
@@ -283,7 +352,7 @@ ${rewriteRules}
         throw new Error("No active client for session");
       }
 
-      // If it has media, we'll send it as a NEW message using the file property
+        // If it has media, we'll send it as a NEW message using the file property
       if (metadata?.hasMedia && metadata?.rawMessage?.media) {
         // Ensure destination is standardized
         let target: any = destination;
@@ -295,17 +364,28 @@ ${rewriteRules}
         console.log(`[Forwarder] Sending media as new message to ${target}`);
         
         // Check if media is just a web page preview (WebPage) or actual media
-        // WebPage previews shouldn't be sent as files
         const media = metadata.rawMessage.media;
         const isWebPage = media.className === 'MessageMediaWebPage' || (media._ && media._ === 'messageMediaWebPage');
         
         if (isWebPage) {
           console.log(`[Forwarder] Media is a WebPage preview, skipping sending as file and sending as text instead`);
-          // Continue to text sending part
         } else {
+          const options = task.options as any;
+          let mediaCaption = metadata.originalText || content;
+          
+          if (options?.aiRewrite?.isEnabled && mediaCaption) {
+            mediaCaption = await this.rewriteWithAI(
+              task,
+              mediaCaption,
+              options.aiRewrite.provider,
+              options.aiRewrite.model,
+              options.aiRewrite.rules || []
+            );
+          }
+
           await client.sendMessage(target, {
             file: media,
-            message: metadata.originalText || content,
+            message: mediaCaption,
             formattingEntities: metadata.entities
           });
           
