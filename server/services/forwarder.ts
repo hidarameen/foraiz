@@ -105,9 +105,8 @@ ${rewriteRules}
 إعادة صياغة الرسالة بالكامل وتطبيق القواعد عليها، والرد بنص الرسالة الجديد فقط دون أي مقدمات أو شروحات.`;
 
             try {
-              const config = await storage.getAIConfigs();
-              const activeConfig = config.find(c => c.provider === options.aiRewrite.provider && c.isActive);
-              const apiKey = activeConfig?.apiKey || process.env[`${options.aiRewrite.provider.toUpperCase()}_API_KEY`];
+              const aiConfig = await storage.getAIConfigByProvider(options.aiRewrite.provider);
+              const apiKey = aiConfig?.isActive ? aiConfig.apiKey : process.env[`${options.aiRewrite.provider.toUpperCase()}_API_KEY`];
 
               if (apiKey) {
                 const rewritten = await AIService.chat(options.aiRewrite.provider, options.aiRewrite.model, prompt, apiKey);
@@ -420,9 +419,8 @@ ${rulesDescription}
 مثال للرد: ALLOW | الرسالة إخبارية بحتة ولا تحتوي على محتوى تحريضي كما هو محظور في القواعد.`;
 
         try {
-          const config = await storage.getAIConfigs();
-          const activeConfig = config.find(c => c.provider === aiFilters.provider && c.isActive);
-          const apiKey = activeConfig?.apiKey || process.env[`${aiFilters.provider.toUpperCase()}_API_KEY`];
+          const aiConfig = await storage.getAIConfigByProvider(aiFilters.provider);
+          const apiKey = aiConfig?.isActive ? aiConfig.apiKey : process.env[`${aiFilters.provider.toUpperCase()}_API_KEY`];
 
           if (apiKey) {
             console.log(`[Forwarder] AI Request Start - Provider: ${aiFilters.provider}, Model: ${aiFilters.model}, Mode: ${aiFilters.mode}`);
