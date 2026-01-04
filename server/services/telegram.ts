@@ -371,6 +371,46 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
 // Message forwarding listener setup
 const messageListeners = new Map<number, boolean>();
 
+export async function resolveChannelId(sessionId: number, identifier: string): Promise<string> {
+  const client = await getTelegramClient(sessionId);
+  if (!client) throw new Error("No active client for session");
+
+  try {
+    // 1. Handle Private Invite Links (https://t.me/joinchat/... or https://t.me/+...)
+    if (identifier.includes("joinchat/") || identifier.includes("t.me/+")) {
+      const hash = identifier.split("/").pop()?.replace("+", "");
+      if (hash) {
+        try {
+          const result = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
+          if (result instanceof Api.ChatInviteAlready) {
+            return result.chat.id.toString();
+          } else if (result instanceof Api.ChatInvite) {
+            // If not joined yet, we might need to join, but for now we just try to get the ID
+            // Telegram usually doesn't give the ID until joined for private links
+            // So we join
+            const joined = await client.invoke(new Api.messages.ImportChatInvite({ hash }));
+            if ('chats' in joined && joined.chats.length > 0) {
+              return joined.chats[0].id.toString();
+            }
+          }
+        } catch (e) {
+          console.error(`[Telegram] Failed to resolve invite link: ${identifier}`, e);
+        }
+      }
+    }
+
+    // 2. Handle Public Links and Usernames
+    const cleanIdentifier = identifier.replace("https://t.me/", "").replace("@", "");
+    const entity = await client.getEntity(cleanIdentifier);
+    return entity.id.toString();
+  } catch (err) {
+    console.error(`[Telegram] Failed to resolve identifier ${identifier}:`, err);
+    // If it looks like a numeric ID already, return it
+    if (/^-?\d+$/.test(identifier)) return identifier;
+    throw err;
+  }
+}
+
 export async function stopMessageListener(sessionId: number) {
   if (!messageListeners.has(sessionId)) return;
   

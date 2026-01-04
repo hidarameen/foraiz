@@ -386,6 +386,19 @@ export async function registerRoutes(
         ...req.body,
         filters: cleanAIFilters(req.body.filters)
       };
+
+      // تسوية المصادر والأهداف إلى IDs رقمية
+      const { resolveChannelId } = await import("./services/telegram");
+      if (cleanedBody.sourceChannels) {
+        cleanedBody.sourceChannels = await Promise.all(
+          cleanedBody.sourceChannels.map((id: string) => resolveChannelId(cleanedBody.sessionId, id).catch(() => id))
+        );
+      }
+      if (cleanedBody.destinationChannels) {
+        cleanedBody.destinationChannels = await Promise.all(
+          cleanedBody.destinationChannels.map((id: string) => resolveChannelId(cleanedBody.sessionId, id).catch(() => id))
+        );
+      }
       
       const input = api.tasks.create.input.parse(cleanedBody);
       logRequest("SUCCESS", api.tasks.create.path, "Input validation passed", { input });
@@ -449,6 +462,19 @@ export async function registerRoutes(
         ...req.body,
         filters: cleanAIFilters(req.body.filters)
       };
+
+      // تسوية المصادر والأهداف إلى IDs رقمية
+      const { resolveChannelId } = await import("./services/telegram");
+      if (cleanedBody.sourceChannels) {
+        cleanedBody.sourceChannels = await Promise.all(
+          cleanedBody.sourceChannels.map((id: string) => resolveChannelId(cleanedBody.sessionId || task.sessionId, id).catch(() => id))
+        );
+      }
+      if (cleanedBody.destinationChannels) {
+        cleanedBody.destinationChannels = await Promise.all(
+          cleanedBody.destinationChannels.map((id: string) => resolveChannelId(cleanedBody.sessionId || task.sessionId, id).catch(() => id))
+        );
+      }
 
       // Ensure isActive is preserved if not explicitly sent as false in a toggle action
       // In a full update, we take what's in the body.
