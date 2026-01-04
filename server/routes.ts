@@ -75,7 +75,7 @@ export async function registerRoutes(
       const entity = await client.getEntity(cleanIdentifier);
       
       let resolvedId = entity.id.toString();
-      const className = entity.className || (entity.constructor ? entity.constructor.name : '');
+      const className = entity.className || (entity as any).constructor?.name || '';
       if ((className === 'Channel' || className === 'Chat') && !resolvedId.startsWith("-100") && !resolvedId.startsWith("-")) {
         resolvedId = "-100" + resolvedId;
       }
