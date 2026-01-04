@@ -72,7 +72,22 @@ export async function registerRoutes(
       }
 
       const cleanIdentifier = String(identifier).replace("https://t.me/", "").replace("@", "");
-      const entity = await client.getEntity(cleanIdentifier);
+      let entity;
+      try {
+        entity = await client.getEntity(cleanIdentifier);
+      } catch (e: any) {
+        // Fallback for private links/invite hashes
+        if (cleanIdentifier.length > 20) {
+          const { resolveChannelId } = await import("./services/telegram");
+          const resolvedId = await resolveChannelId(Number(sessionId), String(identifier));
+          return res.json({
+            id: resolvedId,
+            title: cleanIdentifier,
+            username: null
+          });
+        }
+        throw e;
+      }
       
       let resolvedId = entity.id.toString();
       const className = entity.className || (entity as any).constructor?.name || '';

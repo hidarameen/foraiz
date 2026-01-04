@@ -426,8 +426,10 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
   useEffect(() => {
     if (task?.sourceChannels) {
       setSourceTags(task.sourceChannels.map((id: string) => ({ id, title: id })));
+    } else {
+      setSourceTags([]);
     }
-  }, [task]);
+  }, [task, open]);
 
   const handleResolveSource = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -438,8 +440,17 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
       setResolveLoading(true);
       try {
         const sessionId = form.getValues("sessionId");
+        if (!sessionId) {
+          toast({ title: "تنبيه", description: "يرجى اختيار العقدة (الجلسة) أولاً", variant: "destructive" });
+          setResolveLoading(false);
+          return;
+        }
+
         const res = await fetch(`/api/telegram/resolve?sessionId=${sessionId}&identifier=${encodeURIComponent(identifier)}`);
-        if (!res.ok) throw new Error("Failed to resolve");
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.message || "Failed to resolve");
+        }
         const data = await res.json();
         
         const newTags = [...sourceTags];
@@ -447,10 +458,13 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
           newTags.push({ id: data.id, title: data.title });
           setSourceTags(newTags);
           form.setValue("sourceChannels", newTags.map(t => t.id));
+        } else {
+          toast({ title: "تنبيه", description: "هذه القناة مضافة بالفعل" });
         }
         setSourceInput("");
-      } catch (err) {
-        toast({ title: "خطأ", description: "فشل في جلب معلومات القناة", variant: "destructive" });
+      } catch (err: any) {
+        console.error("Resolve error:", err);
+        toast({ title: "خطأ", description: `فشل في جلب معلومات القناة: ${err.message}`, variant: "destructive" });
       } finally {
         setResolveLoading(false);
       }
