@@ -432,6 +432,7 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
   }, [task, open]);
 
   const handleResolveSource = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Check for Enter key on desktop or a generic Enter/Done on mobile keyboards
     if (e.key === "Enter") {
       e.preventDefault();
       const identifier = sourceInput.trim();
@@ -548,6 +549,8 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
                       value={sourceInput}
                       onChange={(e) => setSourceInput(e.target.value)}
                       onKeyDown={handleResolveSource}
+                      enterKeyHint="enter"
+                      inputMode="text"
                       className="h-14 rounded-2xl bg-muted/30 border-muted-foreground/10 font-mono text-sm text-right" 
                       placeholder="أدخل المعرف واضغط Enter (مثال: @username)" 
                       disabled={resolveLoading}
