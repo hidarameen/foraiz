@@ -105,13 +105,23 @@ ${rewriteRules}
 إعادة صياغة الرسالة بالكامل وتطبيق القواعد عليها، والرد بنص الرسالة الجديد فقط دون أي مقدمات أو شروحات.`;
 
             try {
-              // Get all active configs to find the first working one if the specific one isn't active
+              // Get all active configs to find the first working one
               const allConfigs = await storage.getAIConfigs();
-              const aiConfig = allConfigs.find(c => c.provider === options.aiRewrite.provider && c.isActive);
+              
+              // Try to find the specific provider first, but fallback to any active provider if needed
+              let aiConfig = allConfigs.find(c => c.provider === options.aiRewrite.provider && c.isActive);
+              
+              // If the requested provider isn't active, try to find ANY active provider
+              if (!aiConfig) {
+                aiConfig = allConfigs.find(c => c.isActive);
+              }
+              
               const apiKey = aiConfig?.apiKey || process.env[`${options.aiRewrite.provider.toUpperCase()}_API_KEY`];
 
               if (apiKey) {
-                const rewritten = await AIService.chat(options.aiRewrite.provider, options.aiRewrite.model, prompt, apiKey);
+                // Use the provider from the found config if we fell back, otherwise use the requested one
+                const providerToUse = aiConfig?.provider || options.aiRewrite.provider;
+                const rewritten = await AIService.chat(providerToUse, options.aiRewrite.model, prompt, apiKey);
                 const rewrittenStr = typeof rewritten === 'string' ? rewritten : (rewritten as any)?.message || "";
                 if (rewrittenStr && rewrittenStr.trim().length > 0) {
                   finalContent = rewrittenStr.trim();
@@ -422,15 +432,22 @@ ${rulesDescription}
 
         try {
           const allConfigs = await storage.getAIConfigs();
-          const aiConfig = allConfigs.find(c => c.provider === aiFilters.provider && c.isActive);
+          
+          // Try to find the specific provider first, but fallback to any active provider if needed
+          let aiConfig = allConfigs.find(c => c.provider === aiFilters.provider && c.isActive);
+          
+          if (!aiConfig) {
+            aiConfig = allConfigs.find(c => c.isActive);
+          }
+          
           const apiKey = aiConfig?.apiKey || process.env[`${aiFilters.provider.toUpperCase()}_API_KEY`];
 
           if (apiKey) {
-            console.log(`[Forwarder] AI Request Start - Provider: ${aiFilters.provider}, Model: ${aiFilters.model}, Mode: ${aiFilters.mode}`);
+            console.log(`[Forwarder] AI Request Start - Provider: ${aiConfig?.provider || aiFilters.provider}, Model: ${aiFilters.model}, Mode: ${aiFilters.mode}`);
             console.log(`[Forwarder] AI Prompt sent:\n${prompt}`);
             
             const startTime = Date.now();
-            const response = await AIService.chat(aiFilters.provider, aiFilters.model, prompt, apiKey);
+            const response = await AIService.chat(aiConfig?.provider || aiFilters.provider, aiFilters.model, prompt, apiKey);
             const duration = Date.now() - startTime;
             
             console.log(`[Forwarder] AI Response received in ${duration}ms:`, JSON.stringify(response, null, 2));
