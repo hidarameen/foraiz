@@ -83,14 +83,15 @@ export class MessageForwarder {
         const options = task.options as any;
 
         // 1. إعادة صياغة الرسالة بالذكاء الاصطناعي (AI Rewrite)
-        if (options?.aiRewrite?.isEnabled && options.aiRewrite.rules?.length > 0) {
-          const rewriteRules = options.aiRewrite.rules
+        if (options?.aiRewrite?.isEnabled) {
+          console.log(`[Forwarder] AI Rewrite section entered for task ${task.id}`);
+          const rewriteRules = (options.aiRewrite.rules || [])
             .filter((r: any) => r.isActive)
             .map((r: any) => `- ${r.name}: ${r.instruction}`)
             .join('\n');
 
           if (rewriteRules.length > 0 && finalContent.trim().length > 0) {
-            console.log(`[Forwarder] AI Rewrite Start for task ${task.id}`);
+            console.log(`[Forwarder] AI Rewrite processing message with ${options.aiRewrite.rules.filter((r:any)=>r.isActive).length} active rules`);
             const prompt = `أنت خبير في إعادة صياغة وتحرير النصوص. مهمتك هي إعادة صياغة الرسالة التالية بناءً على القواعد المحددة.
 يجب أن تحافظ على الجوهر الأساسي للرسالة مع تطبيق التعديلات المطلوبة بدقة.
 
@@ -113,11 +114,17 @@ ${rewriteRules}
                 if (rewrittenStr && rewrittenStr.trim().length > 0) {
                   finalContent = rewrittenStr.trim();
                   console.log(`[Forwarder] AI Rewrite Success for task ${task.id}. Content length: ${finalContent.length}`);
+                } else {
+                  console.log(`[Forwarder] AI Rewrite returned empty or invalid response:`, rewritten);
                 }
+              } else {
+                console.error(`[Forwarder] API Key not found for provider: ${options.aiRewrite.provider}`);
               }
             } catch (error) {
               console.error(`[Forwarder] AI Rewrite failed for task ${task.id}:`, error);
             }
+          } else {
+            console.log(`[Forwarder] AI Rewrite skipped: Rules length: ${rewriteRules.length}, Content length: ${finalContent.trim().length}`);
           }
         }
 

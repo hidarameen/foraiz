@@ -1100,7 +1100,7 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
                             <div className="flex items-center justify-between bg-muted/30 p-3 rounded-xl border flex-row-reverse">
                               <Label className="font-bold">تفعيل القاعدة</Label>
                               <Switch 
-                                checked={tempRewrite.isActive} 
+                                checked={tempRewrite.isActive ?? true} 
                                 onCheckedChange={(checked) => setTempRewrite({...tempRewrite, isActive: checked})}
                               />
                             </div>
