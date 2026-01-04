@@ -444,6 +444,13 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
           blacklistRules: filterEmptyRules(data.filters.aiFilters.blacklistRules),
           whitelistRules: filterEmptyRules(data.filters.aiFilters.whitelistRules)
         }
+      },
+      options: {
+        ...data.options,
+        aiRewrite: {
+          ...data.options.aiRewrite,
+          rules: (data.options.aiRewrite.rules || []).filter((r: any) => r.name && r.name.trim().length > 0)
+        }
       }
     };
 
@@ -1105,19 +1112,25 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
                               />
                             </div>
                           </div>
-                          <div className="flex justify-end gap-3 pt-4 border-t flex-row-reverse">
-                            <Button type="button" onClick={saveRewriteRule} className="bg-purple-500 hover:bg-purple-600 px-8">
-                              {editingRewriteIndex !== null ? "حفظ التعديلات" : "إضافة القاعدة"}
-                            </Button>
-                            <Button type="button" variant="ghost" onClick={() => setRewriteDialogOpen(false)}>إلغاء</Button>
-                          </div>
+                            <div className="flex justify-end gap-3 pt-4 border-t flex-row-reverse">
+                              <Button 
+                                type="button" 
+                                onClick={() => {
+                                  saveRewriteRule();
+                                }} 
+                                className="bg-purple-500 hover:bg-purple-600 px-8"
+                              >
+                                {editingRewriteIndex !== null ? "حفظ التعديلات" : "إضافة القاعدة"}
+                              </Button>
+                              <Button type="button" variant="ghost" onClick={() => setRewriteDialogOpen(false)}>إلغاء</Button>
+                            </div>
                         </DialogContent>
                       </Dialog>
                     </div>
 
-                    <div className="space-y-4">
                       {rewriteFields.map((field, index) => {
-                        const rule = form.getValues("options.aiRewrite.rules")?.[index];
+                        const rules = form.getValues("options.aiRewrite.rules") as any[];
+                        const rule = rules?.[index];
                         return (
                           <div key={field.id} className="p-4 bg-background rounded-2xl border border-purple-500/5 space-y-3 relative group hover:border-purple-500/20 transition-all">
                             <div className="flex items-center justify-between flex-row-reverse">
@@ -1130,6 +1143,7 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
                                   type="button"
                                   variant="ghost"
                                   size="sm"
+                                  className="h-8 w-8 p-0"
                                   onClick={() => handleEditRewriteRule(index)}
                                 >
                                   <Edit2 className="w-4 h-4" />
@@ -1138,6 +1152,7 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
                                   type="button" 
                                   variant="ghost" 
                                   size="sm" 
+                                  className="h-8 w-8 p-0"
                                   onClick={() => removeRewrite(index)} 
                                 >
                                   <Trash2 className="w-4 h-4" />
@@ -1154,7 +1169,6 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
                           </div>
                         );
                       })}
-                    </div>
                   </div>
                 </AccordionContent>
               </AccordionItem>

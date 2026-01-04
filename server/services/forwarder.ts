@@ -84,14 +84,15 @@ export class MessageForwarder {
 
         // 1. إعادة صياغة الرسالة بالذكاء الاصطناعي (AI Rewrite)
         if (options?.aiRewrite?.isEnabled) {
-          console.log(`[Forwarder] AI Rewrite section entered for task ${task.id}`);
-          const rewriteRules = (options.aiRewrite.rules || [])
-            .filter((r: any) => r.isActive)
+          console.log(`[Forwarder] AI Rewrite triggered for task ${task.id}. Content length: ${finalContent?.length || 0}`);
+          const rules = Array.isArray(options.aiRewrite.rules) ? options.aiRewrite.rules : [];
+          const rewriteRules = rules
+            .filter((r: any) => r && r.isActive && r.name && r.instruction)
             .map((r: any) => `- ${r.name}: ${r.instruction}`)
             .join('\n');
 
-          if (rewriteRules.length > 0 && finalContent.trim().length > 0) {
-            console.log(`[Forwarder] AI Rewrite processing message with ${options.aiRewrite.rules.filter((r:any)=>r.isActive).length} active rules`);
+          if (rewriteRules.length > 0 && finalContent && finalContent.trim().length > 0) {
+            console.log(`[Forwarder] AI Rewrite processing message with ${rules.filter((r:any)=>r.isActive).length} active rules`);
             const prompt = `أنت خبير في إعادة صياغة وتحرير النصوص. مهمتك هي إعادة صياغة الرسالة التالية بناءً على القواعد المحددة.
 يجب أن تحافظ على الجوهر الأساسي للرسالة مع تطبيق التعديلات المطلوبة بدقة.
 
@@ -124,7 +125,9 @@ ${rewriteRules}
               console.error(`[Forwarder] AI Rewrite failed for task ${task.id}:`, error);
             }
           } else {
-            console.log(`[Forwarder] AI Rewrite skipped: Rules length: ${rewriteRules.length}, Content length: ${finalContent.trim().length}`);
+            const rulesLength = options.aiRewrite.rules?.length || 0;
+            const activeRulesLength = (options.aiRewrite.rules || []).filter((r:any) => r.isActive).length;
+            console.log(`[Forwarder] AI Rewrite skipped: Rules length: ${rulesLength}, Active: ${activeRulesLength}, Content length: ${finalContent.trim().length}`);
           }
         }
 

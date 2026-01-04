@@ -91,9 +91,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateTask(id: number, updates: Partial<InsertTask>): Promise<Task> {
+    // Basic validation to ensure JSON fields are merged correctly if needed, 
+    // but Drizzle's update will replace the whole JSONB column.
+    // Ensure we are passing the full filters/options if they are in updates.
     const [task] = await db
       .update(tasks)
-      .set(updates as any)
+      .set({
+        ...updates as any,
+        // Drizzle/PG JSONB update replaces the entire field.
+        // The routes.ts already normalizes these objects.
+      })
       .where(eq(tasks.id, id))
       .returning();
     return task as Task;

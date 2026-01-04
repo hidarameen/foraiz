@@ -384,6 +384,33 @@ export async function registerRoutes(
     return cleaned;
   }
 
+  // Helper function to clean/normalize task options
+  function cleanTaskOptions(options: any): any {
+    if (!options) return options;
+    const cleaned = { ...options };
+
+    if (cleaned.aiRewrite) {
+      const aiRewrite = { ...cleaned.aiRewrite };
+      // Ensure we don't accidentally drop the whole object if rules are missing
+      aiRewrite.isEnabled = !!aiRewrite.isEnabled;
+      aiRewrite.provider = aiRewrite.provider || "openai";
+      aiRewrite.model = aiRewrite.model || "gpt-4o-mini";
+      
+      aiRewrite.rules = Array.isArray(aiRewrite.rules)
+        ? aiRewrite.rules
+            .filter((r: any) => r && r.name && String(r.name).trim().length > 0)
+            .map((r: any) => ({
+              id: r.id || Math.random().toString(36).substr(2, 9),
+              name: String(r.name).trim(),
+              instruction: String(r.instruction || '').trim(),
+              isActive: r.isActive ?? true
+            }))
+        : [];
+      cleaned.aiRewrite = aiRewrite;
+    }
+    return cleaned;
+  }
+
   app.get(api.tasks.list.path, async (req, res) => {
     logRequest("INFO", api.tasks.list.path, "Fetching all tasks");
     try {
@@ -391,7 +418,8 @@ export async function registerRoutes(
       // Clean all legacy fields from response
       const cleanedTasks = tasks.map(task => ({
         ...task,
-        filters: cleanAIFilters(task.filters)
+        filters: cleanAIFilters(task.filters),
+        options: cleanTaskOptions(task.options)
       }));
       logRequest("SUCCESS", api.tasks.list.path, `Retrieved ${cleanedTasks.length} tasks`);
       res.json(cleanedTasks);
@@ -413,7 +441,8 @@ export async function registerRoutes(
       // Clean legacy fields
       const cleanedTask = {
         ...task,
-        filters: cleanAIFilters(task.filters)
+        filters: cleanAIFilters(task.filters),
+        options: cleanTaskOptions(task.options)
       };
       logRequest("SUCCESS", api.tasks.get.path, `Retrieved task ${taskId}`);
       res.json(cleanedTask);
@@ -432,7 +461,8 @@ export async function registerRoutes(
       // Clean legacy fields from request
       const cleanedBody = {
         ...req.body,
-        filters: cleanAIFilters(req.body.filters)
+        filters: cleanAIFilters(req.body.filters),
+        options: cleanTaskOptions(req.body.options)
       };
 
       // تسوية المصادر والأهداف إلى IDs رقمية
@@ -466,7 +496,8 @@ export async function registerRoutes(
 
       res.status(201).json({
         ...task,
-        filters: cleanAIFilters(task.filters)
+        filters: cleanAIFilters(task.filters),
+        options: cleanTaskOptions(task.options)
       });
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -508,7 +539,8 @@ export async function registerRoutes(
       // Clean legacy fields from request
       const cleanedBody = {
         ...req.body,
-        filters: cleanAIFilters(req.body.filters)
+        filters: cleanAIFilters(req.body.filters),
+        options: cleanTaskOptions(req.body.options)
       };
 
       // تسوية المصادر والأهداف إلى IDs رقمية
@@ -535,7 +567,7 @@ export async function registerRoutes(
       // Ensure isActive is preserved if not explicitly sent as false in a toggle action
       // In a full update, we take what's in the body.
       
-      console.log(`[Routes] Updating task ${taskId} with data:`, JSON.stringify(cleanedBody.filters?.aiFilters, null, 2));
+      console.log(`[Routes] Updating task ${taskId} with data:`, JSON.stringify(cleanedBody.options?.aiRewrite, null, 2));
       const input = api.tasks.update.input.parse(cleanedBody);
       logRequest("SUCCESS", api.tasks.update.path, `Input validation passed for task ${taskId}`, { input });
       
@@ -557,7 +589,8 @@ export async function registerRoutes(
       logRequest("SUCCESS", api.tasks.update.path, `Task ${taskId} updated successfully`);
       res.json({
         ...task,
-        filters: cleanAIFilters(task.filters)
+        filters: cleanAIFilters(task.filters),
+        options: cleanTaskOptions(task.options)
       });
     } catch (err) {
       if (err instanceof z.ZodError) {
