@@ -224,9 +224,16 @@ export class MessageForwarder {
 
       // If it has media, we'll send it as a NEW message using the file property
       if (metadata?.hasMedia && metadata?.rawMessage?.media) {
-        console.log(`[Forwarder] Sending media as new message to ${destination}`);
+        // Ensure destination is standardized
+        let target: any = destination;
+        if (/^\d+$/.test(destination) && destination.length > 5 && !destination.startsWith("-")) {
+          target = "-100" + destination;
+          console.log(`[Forwarder] 🔄 Standardizing destination ${destination} -> ${target} for media`);
+        }
+
+        console.log(`[Forwarder] Sending media as new message to ${target}`);
         
-        await client.sendMessage(destination, {
+        await client.sendMessage(target, {
           file: metadata.rawMessage.media,
           message: metadata.originalText || content,
           formattingEntities: metadata.entities
@@ -241,7 +248,14 @@ export class MessageForwarder {
       }
 
       // Fallback to sending text if no media
-      const entity = await client.getEntity(destination);
+      // Ensure destination is a valid numeric ID (standardized with -100)
+      let target: any = destination;
+      if (/^\d+$/.test(destination) && destination.length > 5 && !destination.startsWith("-")) {
+        target = "-100" + destination;
+        console.log(`[Forwarder] 🔄 Standardizing destination ${destination} -> ${target}`);
+      }
+
+      const entity = await client.getEntity(target);
       const messageOptions: any = {};
 
       if (metadata?.entities) {
