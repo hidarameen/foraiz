@@ -365,7 +365,7 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
     form.setValue(fieldName, rules);
   };
 
-  const onSubmit = (data: any) => {
+  const onSubmit = async (data: any) => {
     // Filter out empty rules (rules without name)
     const filterEmptyRules = (rules: any[]) => {
       return (rules || [])
@@ -377,8 +377,14 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
         }));
     };
 
+    // Before submitting, we need to make sure sourceChannels and destinationChannels 
+    // use IDs but we keep the titles in the tags for display.
+    // However, the backend expects IDs.
+    
     const payload = {
       ...data,
+      sourceChannels: sourceTags.map(t => t.id),
+      destinationChannels: destTags.map(t => t.id),
       filters: {
         ...data.filters,
         mediaTypes: data.filters.mediaTypes || DEFAULT_MEDIA_TYPES,

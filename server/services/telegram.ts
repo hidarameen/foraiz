@@ -620,6 +620,10 @@ export async function startAllMessageListeners() {
   const sessions = await storage.getSessions();
   const tasks = await storage.getTasks();
   
+  console.log(`[Listener] Debug: Found ${sessions.length} sessions and ${tasks.length} tasks.`);
+  sessions.forEach(s => console.log(`[Listener] Debug Session: ID=${s.id}, Name=${s.sessionName}, Active=${s.isActive}`));
+  tasks.forEach(t => console.log(`[Listener] Debug Task: ID=${t.id}, Name=${t.name}, SessionID=${t.sessionId}, Active=${t.isActive}`));
+
   // Get unique session IDs that have at least one active task
   const activeTaskSessionIds = new Set(
     tasks.filter(t => t.isActive).map(t => t.sessionId)
@@ -631,6 +635,8 @@ export async function startAllMessageListeners() {
     console.log("[Listener] No active sessions with active tasks found.");
     return;
   }
+
+  console.log(`[Listener] Found ${activeSessions.length} active sessions to start.`);
 
   for (const session of activeSessions) {
     try {
