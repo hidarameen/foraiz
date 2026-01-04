@@ -101,9 +101,26 @@ export const tasks = pgTable("tasks", {
     delaySeconds?: number;
     addSignature?: string; // Custom footer text
     spoilerText?: boolean; // Force spoiler?
+    aiRewrite?: {
+      isEnabled: boolean;
+      provider: string;
+      model: string;
+      rules: {
+        id: string;
+        name: string;
+        instruction: string;
+        isActive: boolean;
+      }[];
+    };
   }>().default({
     withCaption: true,
-    dropAuthor: false
+    dropAuthor: false,
+    aiRewrite: {
+      isEnabled: false,
+      provider: "openai",
+      model: "gpt-4o-mini",
+      rules: []
+    }
   }),
 
   isActive: boolean("is_active").default(false),
