@@ -87,7 +87,7 @@ export async function sendCode(phoneNumber: string) {
       
       log("SUCCESS", phoneNumber, "Code sent to phone (reused client)", {
         phoneCodeHash: result.phoneCodeHash,
-        type: result.type,
+        type: (result as any).type,
       });
       
       const currentTime = Date.now();
@@ -140,7 +140,7 @@ export async function sendCode(phoneNumber: string) {
     
     log("SUCCESS", phoneNumber, "Code sent to phone", {
       phoneCodeHash: result.phoneCodeHash,
-      type: result.type,
+      type: (result as any).type,
     });
     
     const currentTime = Date.now();
@@ -233,7 +233,7 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
     if (entry.phoneCodeVerified && password) {
       log("INFO", phoneNumber, "Processing password for existing session");
       // Use checkPassword for 2FA instead of client.start() again
-      await client.checkPassword(password);
+      await (client as any).checkPassword(password);
     } else {
       entry.authMethod = "start";
       entry.passwordCallbackCount = 0;
@@ -468,7 +468,7 @@ const albumBuffers = new Map<string, {
 }>();
 
 // Helper function to process albums
-async function processAlbum(groupId: string) {
+const processAlbum = async (groupId: string) => {
   const buffer = albumBuffers.get(groupId);
   if (!buffer) return;
 
@@ -488,7 +488,7 @@ async function processAlbum(groupId: string) {
   } catch (err) {
     console.error(`[Listener] ❌ Error forwarding album:`, err);
   }
-}
+};
 
 // Listen for new messages using the proper event handler
 client.addEventHandler(async (event: any) => {

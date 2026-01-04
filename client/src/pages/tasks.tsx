@@ -366,13 +366,13 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
   };
 
   const onSubmit = async (data: any) => {
-    // Filter out empty rules (rules without name)
+        // Filter out empty rules (rules without name)
     const filterEmptyRules = (rules: any[]) => {
       return (rules || [])
         .filter((r: any) => r.name && r.name.trim().length > 0 && r.name !== "خخشخش")
         .map((r: any, idx: number) => ({
           ...r,
-          id: r.id || `rule_${Date.now()}_${idx}`,
+          id: (r as any).id || `rule_${Date.now()}_${idx}`,
           priority: r.priority ?? idx
         }));
     };
@@ -432,18 +432,46 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
   const [destTags, setDestTags] = useState<{id: string, title: string}[]>([]);
 
   useEffect(() => {
-    if (task) {
-      if (task.sourceChannels) {
-        setSourceTags(task.sourceChannels.map((id: string) => ({ id, title: id })));
+    const initTags = async () => {
+      if (task) {
+        const sessionId = task.sessionId || (sessions?.[0]?.id || 0);
+        
+        const resolveTags = async (ids: string[]) => {
+          return Promise.all(ids.map(async (id) => {
+            // If it's already a name (not starting with -100 or numeric), keep it
+            if (!/^-?\d+$/.test(id)) return { id, title: id };
+            
+            try {
+              const res = await fetch(`/api/telegram/resolve?sessionId=${sessionId}&identifier=${encodeURIComponent(id)}`);
+              if (res.ok) {
+                const data = await res.json();
+                return { id: data.id, title: data.title };
+              }
+            } catch (e) {
+              console.error("Failed to resolve ID:", id);
+            }
+            return { id, title: id };
+          }));
+        };
+
+        if (task.sourceChannels) {
+          const resolved = await resolveTags(task.sourceChannels);
+          setSourceTags(resolved);
+        }
+        if (task.destinationChannels) {
+          const resolved = await resolveTags(task.destinationChannels);
+          setDestTags(resolved);
+        }
+      } else {
+        setSourceTags([]);
+        setDestTags([]);
       }
-      if (task.destinationChannels) {
-        setDestTags(task.destinationChannels.map((id: string) => ({ id, title: id })));
-      }
-    } else {
-      setSourceTags([]);
-      setDestTags([]);
+    };
+
+    if (open) {
+      initTags();
     }
-  }, [task, open]);
+  }, [task, open, sessions]);
 
   const handleResolve = async (identifier: string, isSource: boolean) => {
     if (!identifier) return;
