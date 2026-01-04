@@ -116,11 +116,12 @@ ${rewriteRules}
                 aiConfig = allConfigs.find(c => c.isActive);
               }
               
-              const apiKey = aiConfig?.apiKey || process.env[`${options.aiRewrite.provider.toUpperCase()}_API_KEY`];
+              const apiKey = aiConfig?.apiKey || (aiConfig?.provider ? process.env[`${aiConfig.provider.toUpperCase()}_API_KEY`] : process.env[`${options.aiRewrite.provider.toUpperCase()}_API_KEY`]);
 
               if (apiKey) {
                 // Use the provider from the found config if we fell back, otherwise use the requested one
                 const providerToUse = aiConfig?.provider || options.aiRewrite.provider;
+                console.log(`[Forwarder] AI Rewrite Start - Task: ${task.id}, Provider: ${providerToUse}, Model: ${options.aiRewrite.model}`);
                 const rewritten = await AIService.chat(providerToUse, options.aiRewrite.model, prompt, apiKey);
                 const rewrittenStr = typeof rewritten === 'string' ? rewritten : (rewritten as any)?.message || "";
                 if (rewrittenStr && rewrittenStr.trim().length > 0) {
@@ -293,18 +294,28 @@ ${rewriteRules}
 
         console.log(`[Forwarder] Sending media as new message to ${target}`);
         
-        await client.sendMessage(target, {
-          file: metadata.rawMessage.media,
-          message: metadata.originalText || content,
-          formattingEntities: metadata.entities
-        });
+        // Check if media is just a web page preview (WebPage) or actual media
+        // WebPage previews shouldn't be sent as files
+        const media = metadata.rawMessage.media;
+        const isWebPage = media.className === 'MessageMediaWebPage' || (media._ && media._ === 'messageMediaWebPage');
         
-        return {
-          messageId: metadata.originalMessageId?.toString() || "media",
-          success: true,
-          details: "Media sent as new message successfully",
-          timestamp: new Date(),
-        };
+        if (isWebPage) {
+          console.log(`[Forwarder] Media is a WebPage preview, skipping sending as file and sending as text instead`);
+          // Continue to text sending part
+        } else {
+          await client.sendMessage(target, {
+            file: media,
+            message: metadata.originalText || content,
+            formattingEntities: metadata.entities
+          });
+          
+          return {
+            messageId: metadata.originalMessageId?.toString() || "media",
+            success: true,
+            details: "Media sent as new message successfully",
+            timestamp: new Date(),
+          };
+        }
       }
 
       // Fallback to sending text if no media
@@ -440,7 +451,7 @@ ${rulesDescription}
             aiConfig = allConfigs.find(c => c.isActive);
           }
           
-          const apiKey = aiConfig?.apiKey || process.env[`${aiFilters.provider.toUpperCase()}_API_KEY`];
+          const apiKey = aiConfig?.apiKey || (aiConfig?.provider ? process.env[`${aiConfig.provider.toUpperCase()}_API_KEY`] : process.env[`${aiFilters.provider.toUpperCase()}_API_KEY`]);
 
           if (apiKey) {
             console.log(`[Forwarder] AI Request Start - Provider: ${aiConfig?.provider || aiFilters.provider}, Model: ${aiFilters.model}, Mode: ${aiFilters.mode}`);

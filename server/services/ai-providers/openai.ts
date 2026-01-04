@@ -60,7 +60,7 @@ export class OpenAIProvider {
           'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: model || 'gpt-4o-mini',
+          model: 'gpt-4o-mini',
           messages: [
             {
               role: 'user',
