@@ -58,7 +58,7 @@ ${activeRules}
       const apiKey = aiConfig?.apiKey || (aiConfig?.provider ? process.env[`${aiConfig.provider.toUpperCase()}_API_KEY`] : process.env[`${provider.toUpperCase()}_API_KEY`]);
 
       if (apiKey) {
-        const providerToUse = aiConfig?.provider || provider;
+        const providerToUse = (aiConfig?.provider || provider) as any;
         console.log(`[Forwarder] AI Rewrite Request - Task: ${task.id}, Provider: ${providerToUse}, Model: ${model}`);
         const response = await AIService.chat(providerToUse, model, prompt, apiKey);
         const rewrittenStr = typeof response === 'string' ? response : (response as any)?.message || "";
@@ -210,7 +210,8 @@ ${rewriteRules}
           {
             ...metadata,
             taskId: task.id,
-            taskName: task.name
+            taskName: task.name,
+            task: taskData || task
           }
         );
 
@@ -285,12 +286,13 @@ ${rewriteRules}
         }
         
         // Use the media objects directly from the fetched messages
-        const options = task.options as any;
+        const fetchedTaskData = await storage.getTask(task.id);
+        const options = (fetchedTaskData?.options || task.options) as any;
         let finalCaption = albumCaption;
         
         if (options?.aiRewrite?.isEnabled && finalCaption) {
           finalCaption = await this.rewriteWithAI(
-            task,
+            fetchedTaskData || task,
             finalCaption,
             options.aiRewrite.provider,
             options.aiRewrite.model,
@@ -344,6 +346,7 @@ ${rewriteRules}
     content: string,
     metadata?: Record<string, any>
   ): Promise<ForwardingResult> {
+    const task = metadata?.task as Task;
     try {
       const { getTelegramClient } = await import("./telegram");
       const client = await getTelegramClient(sessionId);
@@ -370,16 +373,16 @@ ${rewriteRules}
         if (isWebPage) {
           console.log(`[Forwarder] Media is a WebPage preview, skipping sending as file and sending as text instead`);
         } else {
-          const options = task.options as any;
+          const taskOptions = (metadata?.task?.options || task?.options) as any;
           let mediaCaption = metadata.originalText || content;
           
-          if (options?.aiRewrite?.isEnabled && mediaCaption) {
+          if (taskOptions?.aiRewrite?.isEnabled && mediaCaption) {
             mediaCaption = await this.rewriteWithAI(
-              task,
+              (metadata?.task as Task) || task,
               mediaCaption,
-              options.aiRewrite.provider,
-              options.aiRewrite.model,
-              options.aiRewrite.rules || []
+              taskOptions.aiRewrite.provider,
+              taskOptions.aiRewrite.model,
+              taskOptions.aiRewrite.rules || []
             );
           }
 
