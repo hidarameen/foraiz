@@ -82,6 +82,44 @@ export class MessageForwarder {
         let finalContent = content;
         const options = task.options as any;
 
+        // 1. إعادة صياغة الرسالة بالذكاء الاصطناعي (AI Rewrite)
+        if (options?.aiRewrite?.isEnabled && options.aiRewrite.rules?.length > 0) {
+          const rewriteRules = options.aiRewrite.rules
+            .filter((r: any) => r.isActive)
+            .map((r: any) => `- ${r.name}: ${r.instruction}`)
+            .join('\n');
+
+          if (rewriteRules.length > 0 && finalContent.trim().length > 0) {
+            console.log(`[Forwarder] AI Rewrite Start for task ${task.id}`);
+            const prompt = `أنت خبير في إعادة صياغة وتحرير النصوص. مهمتك هي إعادة صياغة الرسالة التالية بناءً على القواعد المحددة.
+يجب أن تحافظ على الجوهر الأساسي للرسالة مع تطبيق التعديلات المطلوبة بدقة.
+
+الرسالة الأصلية: "${finalContent}"
+
+القواعد المطلوبة لإعادة الصياغة:
+${rewriteRules}
+
+المطلوب منك:
+إعادة صياغة الرسالة بالكامل وتطبيق القواعد عليها، والرد بنص الرسالة الجديد فقط دون أي مقدمات أو شروحات.`;
+
+            try {
+              const config = await storage.getAIConfigs();
+              const activeConfig = config.find(c => c.provider === options.aiRewrite.provider && c.isActive);
+              const apiKey = activeConfig?.apiKey || process.env[`${options.aiRewrite.provider.toUpperCase()}_API_KEY`];
+
+              if (apiKey) {
+                const rewritten = await AIService.chat(options.aiRewrite.provider, options.aiRewrite.model, prompt, apiKey);
+                if (typeof rewritten === 'string' && rewritten.trim().length > 0) {
+                  finalContent = rewritten.trim();
+                  console.log(`[Forwarder] AI Rewrite Success for task ${task.id}. Content length: ${finalContent.length}`);
+                }
+              }
+            } catch (error) {
+              console.error(`[Forwarder] AI Rewrite failed for task ${task.id}:`, error);
+            }
+          }
+        }
+
         if (options?.addSignature) {
           finalContent = this.addSignature(finalContent, options.addSignature);
         }

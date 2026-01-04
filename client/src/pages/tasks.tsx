@@ -325,9 +325,18 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
     keyName: `rule_${rulesFieldName}`
   });
 
+  const { fields: rewriteFields, append: appendRewrite, remove: removeRewrite } = useFieldArray({
+    control: form.control,
+    name: "options.aiRewrite.rules" as any,
+    keyName: "rewrite_rule"
+  });
+
   const [editingRuleIndex, setEditingRuleIndex] = useState<number | null>(null);
+  const [editingRewriteIndex, setEditingRewriteIndex] = useState<number | null>(null);
   const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
+  const [rewriteDialogOpen, setRewriteDialogOpen] = useState(false);
   const [tempRule, setTempRule] = useState<any>({ name: "", instruction: "", isActive: true });
+  const [tempRewrite, setTempRewrite] = useState<any>({ name: "", instruction: "", isActive: true });
 
   useEffect(() => {
     setRuleDialogOpen(false);
@@ -348,6 +357,19 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
     setRuleDialogOpen(true);
   };
 
+  const handleAddRewriteRule = () => {
+    setEditingRewriteIndex(null);
+    setTempRewrite({ name: "", instruction: "", isActive: true });
+    setRewriteDialogOpen(true);
+  };
+
+  const handleEditRewriteRule = (index: number) => {
+    const rule = form.getValues("options.aiRewrite.rules")?.[index];
+    setEditingRewriteIndex(index);
+    setTempRewrite({ ...rule });
+    setRewriteDialogOpen(true);
+  };
+
   const saveRule = () => {
     if (editingRuleIndex !== null) {
       updateRule(editingRuleIndex, tempRule);
@@ -357,12 +379,27 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
     setRuleDialogOpen(false);
   };
 
+  const saveRewriteRule = () => {
+    if (editingRewriteIndex !== null) {
+      updateRewriteRule(editingRewriteIndex, tempRewrite);
+    } else {
+      appendRewrite(tempRewrite);
+    }
+    setRewriteDialogOpen(false);
+  };
+
   const updateRule = (index: number, value: any) => {
     const mode = form.getValues("filters.aiFilters.mode");
     const fieldName = mode === 'whitelist' ? "filters.aiFilters.whitelistRules" : "filters.aiFilters.blacklistRules";
     const rules = [...form.getValues(fieldName)];
     rules[index] = value;
     form.setValue(fieldName, rules);
+  };
+
+  const updateRewriteRule = (index: number, value: any) => {
+    const rules = [...(form.getValues("options.aiRewrite.rules") || [])];
+    rules[index] = value;
+    form.setValue("options.aiRewrite.rules" as any, rules);
   };
 
   const onSubmit = async (data: any) => {
