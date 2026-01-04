@@ -419,6 +419,50 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
     { key: "invoice", label: "فواتير", icon: ReceiptText },
   ];
 
+  const [resolveLoading, setResolveLoading] = useState(false);
+  const [sourceInput, setSourceInput] = useState("");
+  const [sourceTags, setSourceTags] = useState<{id: string, title: string}[]>([]);
+
+  useEffect(() => {
+    if (task?.sourceChannels) {
+      setSourceTags(task.sourceChannels.map((id: string) => ({ id, title: id })));
+    }
+  }, [task]);
+
+  const handleResolveSource = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const identifier = sourceInput.trim();
+      if (!identifier) return;
+
+      setResolveLoading(true);
+      try {
+        const sessionId = form.getValues("sessionId");
+        const res = await fetch(`/api/telegram/resolve?sessionId=${sessionId}&identifier=${encodeURIComponent(identifier)}`);
+        if (!res.ok) throw new Error("Failed to resolve");
+        const data = await res.json();
+        
+        const newTags = [...sourceTags];
+        if (!newTags.find(t => t.id === data.id)) {
+          newTags.push({ id: data.id, title: data.title });
+          setSourceTags(newTags);
+          form.setValue("sourceChannels", newTags.map(t => t.id));
+        }
+        setSourceInput("");
+      } catch (err) {
+        toast({ title: "خطأ", description: "فشل في جلب معلومات القناة", variant: "destructive" });
+      } finally {
+        setResolveLoading(false);
+      }
+    }
+  };
+
+  const removeSourceTag = (id: string) => {
+    const newTags = sourceTags.filter(t => t.id !== id);
+    setSourceTags(newTags);
+    form.setValue("sourceChannels", newTags.map(t => t.id));
+  };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -467,18 +511,29 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
 
               <div className="space-y-3">
                 <Label className="text-sm font-bold uppercase tracking-widest text-primary/70">القنوات المصدر</Label>
-                <Controller
-                  control={form.control}
-                  name="sourceChannels"
-                  render={({ field }) => (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-2 mb-2 justify-end">
+                    {sourceTags.map(tag => (
+                      <div key={tag.id} className="bg-primary/10 text-primary px-3 py-1 rounded-full flex items-center gap-2 text-sm font-bold">
+                        <span>{tag.title}</span>
+                        <button type="button" onClick={() => removeSourceTag(tag.id)} className="hover:text-destructive">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="relative">
                     <Input 
-                      value={field.value?.join(", ") || ""} 
-                      onChange={(e) => field.onChange(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                      value={sourceInput}
+                      onChange={(e) => setSourceInput(e.target.value)}
+                      onKeyDown={handleResolveSource}
                       className="h-14 rounded-2xl bg-muted/30 border-muted-foreground/10 font-mono text-sm text-right" 
-                      placeholder="@source1, @source2" 
+                      placeholder="أدخل المعرف واضغط Enter (مثال: @username)" 
+                      disabled={resolveLoading}
                     />
-                  )}
-                />
+                    {resolveLoading && <Loader2 className="w-4 h-4 animate-spin absolute left-4 top-5" />}
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-3">

@@ -58,6 +58,39 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/telegram/resolve", async (req, res) => {
+    const { sessionId, identifier } = req.query;
+    if (!sessionId || !identifier) {
+      return res.status(400).json({ message: "Missing sessionId or identifier" });
+    }
+
+    try {
+      const { getTelegramClient } = await import("./services/telegram");
+      const client = await getTelegramClient(Number(sessionId));
+      if (!client) {
+        return res.status(404).json({ message: "Session not found or not active" });
+      }
+
+      const cleanIdentifier = String(identifier).replace("https://t.me/", "").replace("@", "");
+      const entity = await client.getEntity(cleanIdentifier);
+      
+      let resolvedId = entity.id.toString();
+      const className = entity.className || (entity.constructor ? entity.constructor.name : '');
+      if ((className === 'Channel' || className === 'Chat') && !resolvedId.startsWith("-100") && !resolvedId.startsWith("-")) {
+        resolvedId = "-100" + resolvedId;
+      }
+
+      res.json({
+        id: resolvedId,
+        title: (entity as any).title || (entity as any).firstName || cleanIdentifier,
+        username: (entity as any).username
+      });
+    } catch (err: any) {
+      console.error("[Telegram] Resolve error:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // 1. Setup Auth
   await setupAuth(app);
   registerAuthRoutes(app);
