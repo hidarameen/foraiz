@@ -212,10 +212,26 @@ const appStartTime = Math.floor(Date.now() / 1000);
 const processedMessages = new Map<string, number>();
 const processingLocks = new Set<string>();
 
+// Track task versions to detect changes and prevent stale processing
+const taskVersions = new Map<number, number>();
+
+function getTaskKey(taskId: number, messageId: any, chatId: string): string {
+  const version = taskVersions.get(taskId) || 0;
+  return `${taskId}_v${version}_${chatId.replace(/^-100/, "").replace(/^-/, "")}_${messageId}`;
+}
+
 export async function fetchLastMessages(taskId: number, channelIds: string[]) {
   try {
     const task = await storage.getTask(taskId);
     if (!task) return;
+
+    // Update version if needed
+    const currentVersion = taskVersions.get(taskId) || 0;
+    const dbVersion = task.updatedAt ? new Date(task.updatedAt).getTime() : 0;
+    if (dbVersion > currentVersion) {
+      taskVersions.set(taskId, dbVersion);
+      console.log(`[Telegram] [Version] Task ${taskId} updated to version ${dbVersion}`);
+    }
 
     const client = await getTelegramClient(task.sessionId);
     if (!client) return;
@@ -234,7 +250,7 @@ export async function fetchLastMessages(taskId: number, channelIds: string[]) {
         const messages = await client.getMessages(entity, { limit: 5 });
         
         for (const msg of messages) {
-          const messageKey = `${taskId}_${cleanSId}_${msg.id}`;
+          const messageKey = getTaskKey(taskId, msg.id, sId);
           
           // Check if already processed OR currently being processed
           if (processedMessages.has(messageKey) || processingLocks.has(messageKey)) {
@@ -271,6 +287,10 @@ export async function fetchLastMessages(taskId: number, channelIds: string[]) {
 
 async function processIncomingMessage(task: any, message: any, chatId: string, client: TelegramClient) {
   try {
+    // Re-verify task is still active and valid before processing
+    const currentTask = await storage.getTask(task.id);
+    if (!currentTask || !currentTask.isActive) return;
+
     const messageText = message.message || message.text || "";
     let mediaType = "text";
     if (message.photo) mediaType = "photo";
@@ -284,9 +304,9 @@ async function processIncomingMessage(task: any, message: any, chatId: string, c
     else if (message.poll) mediaType = "poll";
     
     const { forwarder } = await import("./forwarder");
-    for (const destination of task.destinationChannels) {
+    for (const destination of currentTask.destinationChannels) {
       await forwarder.forwardMessage(
-        task,
+        currentTask,
         message.id?.toString() || `msg_${Date.now()}`,
         messageText,
         { 
@@ -335,8 +355,8 @@ export async function startMessageListener(sessionId: number) {
       const { messageIds, task, chatId } = buffer;
       albumBuffers.delete(groupId);
       
-      // Use a lock/key for albums too
-      const albumKey = `album_${task.id}_${chatId}_${groupId}`;
+      // Use versioned key for albums too
+      const albumKey = `album_${getTaskKey(task.id, groupId, chatId)}`;
       if (processedMessages.has(albumKey)) {
         console.log(`[Telegram] [Album] ⏩ Album ${groupId} for task ${task.id} already processed, skipping`);
         return;
@@ -361,16 +381,21 @@ export async function startMessageListener(sessionId: number) {
         const chatId = chatIdRaw.toString();
         const cleanChatId = chatId.replace(/^-100/, "").replace(/^-/, "");
 
-  // Only fetch tasks for THIS session to avoid cross-session processing
+        // Only fetch tasks for THIS session to avoid cross-session processing
         const allTasks = await storage.getTasks();
         const sessionTasks = allTasks.filter(t => t.sessionId === sessionId && t.isActive);
 
         for (const task of sessionTasks) {
+          // Sync version
+          const dbVersion = task.updatedAt ? new Date(task.updatedAt).getTime() : 0;
+          if (dbVersion > (taskVersions.get(task.id) || 0)) {
+            taskVersions.set(task.id, dbVersion);
+          }
+
           const sourceChannels = (task.sourceChannels || []).map(s => s.replace(/^-100/, "").replace(/^-/, ""));
           
           if (sourceChannels.includes(cleanChatId)) {
-            // Include task.id in the key to prevent conflicts between different tasks for the same message
-            const messageKey = `${task.id}_${cleanChatId}_${message.id}`;
+            const messageKey = getTaskKey(task.id, message.id, chatId);
             
             // Check if already processed OR currently being processed
             if (processedMessages.has(messageKey) || processingLocks.has(messageKey)) {

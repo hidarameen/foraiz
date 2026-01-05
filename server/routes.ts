@@ -592,12 +592,13 @@ export async function registerRoutes(
         return res.status(404).json({ message: 'Task not found' });
       }
 
-      // Restart listener immediately if task is active
+      // Restart listener logic
       if (task.isActive) {
         const { startMessageListener } = await import("./services/telegram");
-        // We don't await this to keep the response fast, but it runs in background
-        startMessageListener(task.sessionId).catch(err => 
-          console.error(`[Routes] Failed to restart listener for session ${task.sessionId}:`, err)
+        // startMessageListener already has an internal check (messageListeners.has(sessionId))
+        // to prevent duplicate listeners for the same session.
+        await startMessageListener(task.sessionId).catch(err => 
+          console.error(`[Routes] Failed to ensure listener for session ${task.sessionId}:`, err)
         );
       }
 
