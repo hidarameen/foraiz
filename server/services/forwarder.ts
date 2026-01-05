@@ -4,6 +4,7 @@
  * من مصادر متعددة إلى أهداف متعددة
  */
 
+import { Api } from "telegram";
 import { storage } from "../storage";
 import type { Task, Log } from "@shared/schema";
 import { AIService } from "./ai";
@@ -375,8 +376,12 @@ export class MessageForwarder {
           // Fix: Check for both boolean false and string 'false'
           const isLinkPreviewDisabled = taskOptions?.linkPreview === false || taskOptions?.linkPreview === 'false';
 
-          console.log(`[Forwarder] Executing client.sendMessage for media to ${target}. Link preview options:`, { isDisabled: isLinkPreviewDisabled });
-          
+          // سجلات تفصيلية لفحص حالة معاينة الروابط للرسالة الحالية قبل الإرسال
+          console.log(`[Forwarder] [DEBUG-MESSAGE-DATA] Target: ${target}`);
+          console.log(`[Forwarder] [DEBUG-MESSAGE-DATA] Link Preview Config: ${isLinkPreviewDisabled ? 'DISABLED (OFF)' : 'ENABLED (ON)'}`);
+          console.log(`[Forwarder] [DEBUG-MESSAGE-DATA] Original Media Class: ${media.className}`);
+          console.log(`[Forwarder] [DEBUG-MESSAGE-DATA] Processing Mode: Media with Caption`);
+
           const mediaOptions: any = {
             file: media,
             message: mediaCaption,
@@ -387,6 +392,7 @@ export class MessageForwarder {
           };
 
           if (isLinkPreviewDisabled) {
+            console.log(`[Forwarder] [DEBUG-MESSAGE-DATA] Applying Aggressive Sanitization (Removing Entities & Disabling ParseMode)`);
             // Aggressive link preview disabling
             mediaOptions.linkPreview = { isDisabled: true };
             mediaOptions.linkPreviewOptions = { isDisabled: true };
@@ -395,27 +401,35 @@ export class MessageForwarder {
             (mediaOptions as any).link_preview = { is_disabled: true };
             
             // Fix: CRITICAL - GramJS/Telegram auto-link detection is VERY persistent.
-            // We must strip ALL entities and also potentially use forceDocument if it's a photo
             mediaOptions.formattingEntities = [];
             mediaOptions.entities = [];
             
-            // If it's a photo and we want to be extra safe about links in caption
             if (media.className === 'MessageMediaPhoto' || media.className === 'Photo') {
-              mediaOptions.forceDocument = false; // Keep as photo but be strict with caption
+              mediaOptions.forceDocument = false; 
             }
 
-            // Remove any potential markdown/html that GramJS might try to parse
             mediaCaption = mediaCaption.replace(/(https?:\/\/[^\s]+)/g, (url: string) => url);
             mediaOptions.message = mediaCaption;
             mediaOptions.parseMode = undefined;
           }
 
-          console.log(`[Forwarder] FINAL CALL: client.sendMessage to ${target} with options:`, JSON.stringify({
-            isDisabled: isLinkPreviewDisabled,
-            hasEntities: !!mediaOptions.formattingEntities?.length
-          }));
-
-          await client.sendMessage(target, mediaOptions);
+          console.log(`[Forwarder] [DEBUG-MESSAGE-DATA] Final Options for client.sendMessage:`, JSON.stringify(mediaOptions));
+          
+          if (isLinkPreviewDisabled) {
+            // Using low-level API for aggressive disabling
+            await client.invoke(
+              new Api.messages.SendMedia({
+                peer: target,
+                media: media,
+                message: mediaCaption,
+                entities: [],
+                noWebpage: true,
+                ...mediaOptions
+              })
+            );
+          } else {
+            await client.sendMessage(target, mediaOptions);
+          }
           console.log(`[Forwarder] Media sent successfully to ${target}`);
           
           return {
@@ -455,9 +469,13 @@ export class MessageForwarder {
       // Fix: Check for both boolean false and string 'false'
       const isLinkPreviewDisabled = options?.linkPreview === false || options?.linkPreview === 'false';
 
-      console.log(`[Forwarder] Sending text message to ${target}. Link preview options:`, { isDisabled: isLinkPreviewDisabled });
+      // سجلات تفصيلية لفحص حالة معاينة الروابط للرسالة الحالية قبل الإرسال
+      console.log(`[Forwarder] [DEBUG-MESSAGE-DATA] Target: ${target}`);
+      console.log(`[Forwarder] [DEBUG-MESSAGE-DATA] Link Preview Config: ${isLinkPreviewDisabled ? 'DISABLED (OFF)' : 'ENABLED (ON)'}`);
+      console.log(`[Forwarder] [DEBUG-MESSAGE-DATA] Processing Mode: Text Only`);
 
       if (isLinkPreviewDisabled) {
+        console.log(`[Forwarder] [DEBUG-MESSAGE-DATA] Applying Aggressive Sanitization (Removing Entities, Markup & Disabling ParseMode)`);
         // Aggressive link preview disabling
         messageOptions.linkPreview = { isDisabled: true };
         messageOptions.linkPreviewOptions = { isDisabled: true };
@@ -480,19 +498,20 @@ export class MessageForwarder {
 
       const finalMessage = (content && content.trim().length > 0) ? content : " .";
 
-      console.log(`[Forwarder] FINAL CALL: client.sendMessage to ${target} with options:`, JSON.stringify({
-        isDisabled: isLinkPreviewDisabled,
-        hasEntities: !!messageOptions.formattingEntities?.length
-      }));
+      console.log(`[Forwarder] [DEBUG-MESSAGE-DATA] Final Options for client.sendMessage:`, JSON.stringify(messageOptions));
 
-      const result = await client.sendMessage(entity, {
-        message: finalMessage,
-        ...messageOptions,
-        parseMode: isLinkPreviewDisabled ? undefined : "html" // Force no parsing if disabled
-      });
+      const result = await client.invoke(
+        new Api.messages.SendMessage({
+          peer: entity,
+          message: finalMessage,
+          noWebpage: isLinkPreviewDisabled,
+          entities: isLinkPreviewDisabled ? [] : undefined,
+          ...messageOptions
+        })
+      ) as any;
       
       return {
-        messageId: result.id?.toString() || `${Date.now()}`,
+        messageId: result.id?.toString() || result.updates?.[0]?.id?.toString() || `${Date.now()}`,
         success: true,
         details: "Message sent successfully",
         timestamp: new Date(),
