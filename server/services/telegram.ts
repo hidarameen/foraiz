@@ -232,10 +232,17 @@ export async function fetchLastMessages(taskId: number, channelIds: string[]) {
         const messages = await client.getMessages(entity, { limit: 10 });
         console.log(`[Telegram] 📥 Fetched ${messages.length} messages from ${sId}`);
         
+        const now = Math.floor(Date.now() / 1000);
+        const twoMinutesAgo = now - (2 * 60);
+
         for (const msg of messages) {
-          // Only process messages newer than... (let's say 30 mins) or just process all and let forwarder handle duplicates?
-          // Forwarder doesn't handle duplicates natively by ID yet, but let's at least log
-          console.log(`[Telegram] 📝 Processing msg ID ${msg.id} from ${sId}`);
+          // Filter out old messages: only process those from the last 2 minutes
+          if (msg.date < twoMinutesAgo) {
+            console.log(`[Telegram] ⏭️ Skipping old message ${msg.id} from ${sId} (Date: ${new Date(msg.date * 1000).toISOString()})`);
+            continue;
+          }
+
+          console.log(`[Telegram] 📝 Processing new msg ID ${msg.id} from ${sId}`);
           await processIncomingMessage(task, msg, sId, client);
         }
       } catch (e) {
