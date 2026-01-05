@@ -83,7 +83,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteSession(id: number): Promise<void> {
-    // Delete linked tasks first manually to ensure cascade behavior if DB level fails
+    // Delete linked logs, then tasks, then session to ensure full cleanup
+    const sessionTasks = await db.select().from(tasks).where(eq(tasks.sessionId, id));
+    for (const task of sessionTasks) {
+      await db.delete(logs).where(eq(logs.taskId, task.id));
+    }
     await db.delete(tasks).where(eq(tasks.sessionId, id));
     await db.delete(sessions).where(eq(sessions.id, id));
   }
@@ -120,6 +124,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTask(id: number): Promise<void> {
+    await db.delete(logs).where(eq(logs.taskId, id));
     await db.delete(tasks).where(eq(tasks.id, id));
   }
 
