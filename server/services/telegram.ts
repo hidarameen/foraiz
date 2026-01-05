@@ -229,21 +229,20 @@ export async function fetchLastMessages(taskId: number, channelIds: string[]) {
           entity = sId;
         }
 
-        const messages = await client.getMessages(entity, { limit: 10 });
+        // Fetch only 1 message instead of 10 to minimize getting old history
+        const messages = await client.getMessages(entity, { limit: 1 });
         console.log(`[Telegram] 📥 Fetched ${messages.length} messages from ${sId}`);
         
         const now = Math.floor(Date.now() / 1000);
-        const twoMinutesAgo = now - (2 * 60);
+        // Reduce the window to 1 minute to strictly fetch only brand new messages
+        const oneMinuteAgo = now - 60;
 
         for (const msg of messages) {
-          // Filter out old messages: only process those from the last 2 minutes
-          if (msg.date < twoMinutesAgo) {
-            console.log(`[Telegram] ⏭️ Skipping old message ${msg.id} from ${sId} (Date: ${new Date(msg.date * 1000).toISOString()})`);
-            continue;
+          // Strictly only process messages from the very last minute
+          if (msg.date >= oneMinuteAgo) {
+            console.log(`[Telegram] 📝 Processing NEW msg ID ${msg.id} from ${sId}`);
+            await processIncomingMessage(task, msg, sId, client);
           }
-
-          console.log(`[Telegram] 📝 Processing new msg ID ${msg.id} from ${sId}`);
-          await processIncomingMessage(task, msg, sId, client);
         }
       } catch (e) {
         console.error(`[Telegram] ❌ Manual fetch failed for channel ${channelId}:`, (e as Error).message);
