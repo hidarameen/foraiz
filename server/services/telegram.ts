@@ -208,7 +208,8 @@ export async function resolveChannelId(sessionId: number, identifier: string): P
 // Track the application start time for polling filters
 const appStartTime = Math.floor(Date.now() / 1000);
 // Cache for processed message IDs to prevent duplicates
-const processedMessageIds = new Set<string>();
+// Using a Map of messageKey -> timestamp to allow for TTL-like cleanup
+const processedMessages = new Map<string, number>();
 
 export async function fetchLastMessages(taskId: number, channelIds: string[]) {
   try {
@@ -233,15 +234,21 @@ export async function fetchLastMessages(taskId: number, channelIds: string[]) {
         for (const msg of messages) {
           const messageKey = `${taskId}_${sId}_${msg.id}`;
           
-          // Only process messages published after start and not already processed
-          if (msg.date >= appStartTime && !processedMessageIds.has(messageKey)) {
-            console.log(`[Telegram] 📝 Processing NEW msg ID ${msg.id} from ${sId}`);
-            processedMessageIds.add(messageKey);
+          // Check if already processed (by updates or previous polling)
+          if (processedMessages.has(messageKey)) {
+            // No need to log skipped messages to avoid clutter, but we can if detailed logs are needed
+            continue;
+          }
+
+          // Only process messages published after start
+          if (msg.date >= appStartTime) {
+            console.log(`[Telegram] [Polling] 🔍 Message ID ${msg.id} from ${sId} NOT FOUND in Updates - Processing via POLLING`);
+            processedMessages.set(messageKey, Date.now());
             
-            // Keep the set size manageable
-            if (processedMessageIds.size > 10000) {
-              const firstKey = processedMessageIds.values().next().value;
-              if (firstKey) processedMessageIds.delete(firstKey);
+            // Keep the cache manageable
+            if (processedMessages.size > 10000) {
+              const oldestKey = processedMessages.keys().next().value;
+              if (oldestKey) processedMessages.delete(oldestKey);
             }
             
             await processIncomingMessage(task, msg, sId, client);
@@ -342,6 +349,18 @@ export async function startMessageListener(sessionId: number) {
           const sourceChannels = (task.sourceChannels || []).map(s => s.replace(/^-100/, "").replace(/^-/, ""));
           
           if (sourceChannels.includes(cleanChatId)) {
+            const messageKey = `${task.id}_${chatId}_${message.id}`;
+            
+            // Check if already processed by polling
+            if (processedMessages.has(messageKey)) {
+              console.log(`[Telegram] ⏩ Update for msg ID ${message.id} already processed by polling, skipping`);
+              continue;
+            }
+
+            // Mark as processed by updates
+            processedMessages.set(messageKey, Date.now());
+            console.log(`[Telegram] [Updates] 🚀 Message ID ${message.id} from ${chatId} received via UPDATES`);
+
             if (message.groupedId) {
               const groupId = message.groupedId.toString();
               const existingBuffer = albumBuffers.get(groupId);
