@@ -484,6 +484,10 @@ ${rewriteRules}
             (mediaOptions as any).link_preview = { is_disabled: true };
             // Ensure no other flags override this
             mediaOptions.silent = mediaOptions.silent || false;
+            // Strip entities if AI rewrite happened to avoid auto-link detection
+            if (taskOptions?.aiRewrite?.isEnabled) {
+              mediaOptions.formattingEntities = [];
+            }
           }
 
           await client.sendMessage(target, mediaOptions);
@@ -534,6 +538,11 @@ ${rewriteRules}
         (messageOptions as any).link_preview = { is_disabled: true };
         // Ensure no other flags override this
         messageOptions.silent = messageOptions.silent || false;
+        // Strip URLs or entities that might trigger preview if AI rewrite happened
+        if (options?.aiRewrite?.isEnabled) {
+          messageOptions.formattingEntities = [];
+          messageOptions.parseMode = undefined;
+        }
       }
 
       if (metadata?.entities) {
