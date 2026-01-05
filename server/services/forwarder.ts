@@ -380,24 +380,34 @@ export class MessageForwarder {
           const mediaOptions: any = {
             file: media,
             message: mediaCaption,
-            formattingEntities: metadata.entities
+            formattingEntities: metadata.entities,
+            // GramJS specific: disable link preview if requested
+            linkPreview: isLinkPreviewDisabled ? { isDisabled: true } : undefined,
+            noWebpage: isLinkPreviewDisabled,
           };
 
           if (isLinkPreviewDisabled) {
-            // Comprehensive link preview disabling for GramJS
+            // Aggressive link preview disabling
             mediaOptions.linkPreview = { isDisabled: true };
             mediaOptions.linkPreviewOptions = { isDisabled: true };
             mediaOptions.noWebpage = true;
             mediaOptions.clearDraft = true;
             (mediaOptions as any).link_preview = { is_disabled: true };
-            // Ensure no other flags override this
-            mediaOptions.silent = mediaOptions.silent || false;
             
-            // Fix: CRITICAL - Remove all entities and sanitize caption to prevent auto-link detection
+            // Fix: CRITICAL - GramJS/Telegram auto-link detection is VERY persistent.
+            // We must strip ALL entities and also potentially use forceDocument if it's a photo
             mediaOptions.formattingEntities = [];
             mediaOptions.entities = [];
+            
+            // If it's a photo and we want to be extra safe about links in caption
+            if (media.className === 'MessageMediaPhoto' || media.className === 'Photo') {
+              mediaOptions.forceDocument = false; // Keep as photo but be strict with caption
+            }
+
+            // Remove any potential markdown/html that GramJS might try to parse
             mediaCaption = mediaCaption.replace(/(https?:\/\/[^\s]+)/g, (url: string) => url);
             mediaOptions.message = mediaCaption;
+            mediaOptions.parseMode = undefined;
           }
 
           console.log(`[Forwarder] FINAL CALL: client.sendMessage to ${target} with options:`, JSON.stringify({
@@ -448,7 +458,7 @@ export class MessageForwarder {
       console.log(`[Forwarder] Sending text message to ${target}. Link preview options:`, { isDisabled: isLinkPreviewDisabled });
 
       if (isLinkPreviewDisabled) {
-        // Comprehensive link preview disabling for GramJS
+        // Aggressive link preview disabling
         messageOptions.linkPreview = { isDisabled: true };
         messageOptions.linkPreviewOptions = { isDisabled: true };
         messageOptions.noWebpage = true;
@@ -457,13 +467,14 @@ export class MessageForwarder {
         // Ensure no other flags override this
         messageOptions.silent = messageOptions.silent || false;
         
-        // CRITICAL: Always strip entities if linkPreview is disabled, 
-        // regardless of whether AI rewrite happened.
+        // CRITICAL: Aggressively strip ALL metadata that could trigger a preview
         messageOptions.formattingEntities = [];
         messageOptions.entities = [];
         messageOptions.parseMode = undefined;
+        messageOptions.replyMarkup = undefined;
         
         // Clean the message from any HTML-like structures that might trigger auto-parsing
+        // GramJS sometimes auto-detects links even without entities if parseMode is not explicitly null
         content = content.replace(/(https?:\/\/[^\s]+)/g, (url: string) => url);
       }
 
@@ -476,7 +487,8 @@ export class MessageForwarder {
 
       const result = await client.sendMessage(entity, {
         message: finalMessage,
-        ...messageOptions
+        ...messageOptions,
+        parseMode: isLinkPreviewDisabled ? undefined : "html" // Force no parsing if disabled
       });
       
       return {
