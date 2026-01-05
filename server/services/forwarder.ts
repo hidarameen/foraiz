@@ -546,14 +546,14 @@ ${rewriteRules}
         (messageOptions as any).link_preview = { is_disabled: true };
         // Ensure no other flags override this
         messageOptions.silent = messageOptions.silent || false;
-        // Strip URLs or entities that might trigger preview if AI rewrite happened
-        // Note: This must be the VERY last operation before sending
-        if (options?.aiRewrite?.isEnabled) {
-          messageOptions.formattingEntities = [];
-          messageOptions.parseMode = undefined;
-          // Clean the message from any HTML-like structures that might trigger auto-parsing
-          content = content.replace(/(https?:\/\/[^\s]+)/g, (url: string) => url);
-        }
+        
+        // CRITICAL: Always strip entities if linkPreview is disabled, 
+        // regardless of whether AI rewrite happened.
+        messageOptions.formattingEntities = [];
+        messageOptions.parseMode = undefined;
+        
+        // Clean the message from any HTML-like structures that might trigger auto-parsing
+        content = content.replace(/(https?:\/\/[^\s]+)/g, (url: string) => url);
       }
 
       const finalMessage = (content && content.trim().length > 0) ? content : " .";
