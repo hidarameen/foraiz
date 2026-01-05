@@ -38,11 +38,9 @@ export async function getTelegramClient(sessionId: number): Promise<TelegramClie
   await client.connect();
   activeClients.set(sessionId, client);
 
-  // gramjs doesn't automatically subscribe to updates for large channels
-  // unless they are explicitly "viewed" or interacted with.
   try {
     await client.getMe();
-    // Added: Invoke getDialogs to force update subscription for large channels
+    // Force subscription to large channel updates
     await client.getDialogs({ limit: 100 });
     console.log(`[Telegram] ✅ Connection stabilized and dialogs fetched for session ${sessionId}`);
   } catch (e) {
@@ -52,23 +50,22 @@ export async function getTelegramClient(sessionId: number): Promise<TelegramClie
   return client;
 }
 
-// Store pending login states with more detailed info
+// Store pending login states
 const pendingLogins = new Map<string, { 
   client: TelegramClient; 
   timestamp: number;
   phoneCodeHash?: string;
   phoneCode?: string;
   isVerifyingPassword?: boolean;
-  phoneCodeVerified?: boolean; // Phone code accepted, waiting for password
-  codeExpiryTime?: number; // Expire codes after 5 minutes
+  phoneCodeVerified?: boolean;
+  codeExpiryTime?: number;
   attemptCount?: number;
-  authMethod?: "start" | "password_retry"; // Track which method was last used
-  passwordFailureCount?: number; // Track failed password attempts
-  floodWaitUntil?: number; // Timestamp until rate limit is lifted
-  passwordCallbackCount?: number; // Track password callback invocations to prevent infinite loop
+  authMethod?: "start" | "password_retry";
+  passwordFailureCount?: number;
+  floodWaitUntil?: number;
+  passwordCallbackCount?: number;
 }>();
 
-// Helper function to clean up a login session
 async function cleanupLoginSession(phoneNumber: string) {
   const entry = pendingLogins.get(phoneNumber);
   if (entry) {
@@ -90,34 +87,11 @@ export async function sendCode(phoneNumber: string) {
     
     log("INFO", phoneNumber, "Reusing existing client for new code request");
     try {
-      const result = await existing.client.sendCode(
-        { apiId, apiHash },
-        phoneNumber
-      );
-      
-      log("SUCCESS", phoneNumber, "Code sent to phone (reused client)", {
-        phoneCodeHash: result.phoneCodeHash,
-        type: (result as any).type,
-      });
-      
-      const currentTime = Date.now();
-      const expiryTime = currentTime + (5 * 60 * 1000);
-      
+      const result = await existing.client.sendCode({ apiId, apiHash }, phoneNumber);
       existing.phoneCodeHash = result.phoneCodeHash;
-      existing.codeExpiryTime = expiryTime;
-      existing.phoneCode = undefined;
-      existing.phoneCodeVerified = undefined;
-      existing.isVerifyingPassword = undefined;
-      existing.attemptCount = 0;
-      existing.passwordFailureCount = 0;
-      existing.timestamp = currentTime;
-      
+      existing.codeExpiryTime = Date.now() + (5 * 60 * 1000);
       return result.phoneCodeHash;
     } catch (error: any) {
-      log("ERROR", phoneNumber, "Failed to resend code with existing client", {
-        errorMessage: error.message,
-        errorCode: error.code
-      });
       await existing.client.disconnect().catch(() => {});
       pendingLogins.delete(phoneNumber);
     }
@@ -130,34 +104,19 @@ export async function sendCode(phoneNumber: string) {
     });
     
     await client.connect();
-    const result = await client.sendCode(
-      { apiId, apiHash },
-      phoneNumber
-    );
-    
-    const currentTime = Date.now();
-    const expiryTime = currentTime + (5 * 60 * 1000);
+    const result = await client.sendCode({ apiId, apiHash }, phoneNumber);
     
     pendingLogins.set(phoneNumber, { 
       client, 
-      timestamp: currentTime,
+      timestamp: Date.now(),
       phoneCodeHash: result.phoneCodeHash,
-      codeExpiryTime: expiryTime,
+      codeExpiryTime: Date.now() + (5 * 60 * 1000),
       attemptCount: 0,
       passwordFailureCount: 0
     });
     
-    setTimeout(async () => {
-      const entry = pendingLogins.get(phoneNumber);
-      if (entry && Date.now() - entry.timestamp >= 15 * 60 * 1000) {
-        await entry.client.disconnect().catch(() => {});
-        pendingLogins.delete(phoneNumber);
-      }
-    }, 15 * 60 * 1000);
-
     return result.phoneCodeHash;
   } catch (error: any) {
-    log("ERROR", phoneNumber, "Failed to send code", { errorMessage: error.message });
     throw error;
   }
 }
@@ -167,8 +126,6 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
   if (!entry) throw new Error("SESSION_EXPIRED_OR_NOT_FOUND");
 
   const { client } = entry;
-  entry.attemptCount = (entry.attemptCount || 0) + 1;
-  
   try {
     if (entry.phoneCodeVerified && password) {
       await (client as any).checkPassword(password);
@@ -178,7 +135,6 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
         phoneCode: async () => code,
         password: async () => {
           if (!password) {
-            entry.isVerifyingPassword = true;
             entry.phoneCodeVerified = true;
             throw new Error("PASSWORD_REQUIRED");
           }
@@ -186,7 +142,6 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
         },
         onError: (err: any) => {
           if (err.message === "PASSWORD_REQUIRED") return;
-          log("ERROR", phoneNumber, "client.start() error", { message: err.message });
         }
       });
     }
@@ -211,18 +166,14 @@ export async function resolveChannelId(sessionId: number, identifier: string): P
     if (identifier.includes("joinchat/") || identifier.includes("t.me/+")) {
       const hash = identifier.split("/").pop()?.replace("+", "");
       if (hash) {
-        try {
-          const result = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
-          if (result instanceof Api.ChatInviteAlready) {
-            return result.chat.id.toString();
-          } else if (result instanceof Api.ChatInvite) {
-            const joined = await client.invoke(new Api.messages.ImportChatInvite({ hash }));
-            if ('chats' in joined && joined.chats.length > 0) {
-              return joined.chats[0].id.toString();
-            }
+        const result = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
+        if (result instanceof Api.ChatInviteAlready) {
+          return result.chat.id.toString();
+        } else if (result instanceof Api.ChatInvite) {
+          const joined = await client.invoke(new Api.messages.ImportChatInvite({ hash }));
+          if ('chats' in joined && joined.chats.length > 0) {
+            return joined.chats[0].id.toString();
           }
-        } catch (e) {
-          console.error(`[Telegram] Failed to resolve invite link: ${identifier}`, e);
         }
       }
     }
@@ -238,8 +189,8 @@ export async function resolveChannelId(sessionId: number, identifier: string): P
 
     const entity = await client.getEntity(cleanIdentifier);
     let resolvedId = entity.id.toString();
-    const className = entity.className || (entity as any).constructor?.name || (entity as any)._?.replace('Api.', '') || '';
-    if ((entity instanceof Api.Channel || entity instanceof Api.Chat || className === 'Channel' || className === 'Chat') && !resolvedId.startsWith("-100") && !resolvedId.startsWith("-")) {
+    const className = (entity as any).className || (entity as any).constructor?.name || '';
+    if ((entity instanceof Api.Channel || entity instanceof Api.Chat || className.includes('Channel')) && !resolvedId.startsWith("-100") && !resolvedId.startsWith("-")) {
       resolvedId = "-100" + resolvedId;
     }
     return resolvedId;
@@ -252,24 +203,24 @@ export async function resolveChannelId(sessionId: number, identifier: string): P
 export async function fetchLastMessages(taskId: number, channelIds: string[]) {
   try {
     const task = await storage.getTask(taskId);
-    if (!task) throw new Error("Task not found");
+    if (!task) return;
 
     const client = await getTelegramClient(task.sessionId);
-    if (!client) throw new Error("No active client for session");
+    if (!client) return;
 
     for (const channelId of channelIds) {
       try {
         const entity = await client.getEntity(channelId);
-        const messages = await client.getMessages(entity, { limit: 5 });
+        const messages = await client.getMessages(entity, { limit: 10 });
         for (const msg of messages) {
           await processIncomingMessage(task, msg, channelId, client);
         }
       } catch (e) {
-        console.error(`[Telegram] ❌ Failed to fetch from ${channelId}:`, (e as Error).message);
+        console.error(`[Telegram] Manual fetch fail for ${channelId}:`, (e as Error).message);
       }
     }
   } catch (err) {
-    console.error(`[Telegram] Error in manual fetch:`, err);
+    console.error(`[Telegram] Manual fetch error:`, err);
   }
 }
 
@@ -305,7 +256,7 @@ async function processIncomingMessage(task: any, message: any, chatId: string, c
       );
     }
   } catch (err) {
-    console.error(`[Listener] ❌ Error in processIncomingMessage:`, err);
+    console.error(`[Listener] Error in processIncomingMessage:`, err);
   }
 }
 
@@ -338,7 +289,7 @@ export async function startMessageListener(sessionId: number) {
         const { forwarder } = await import("./forwarder");
         await forwarder.forwardAlbum(task, messageIds, chatId);
       } catch (err) {
-        console.error(`[Listener] ❌ Error forwarding album:`, err);
+        console.error(`[Listener] Album forward error:`, err);
       }
     };
 
@@ -381,11 +332,41 @@ export async function startMessageListener(sessionId: number) {
           }
         }
       } catch (err) {
-        console.error(`[Listener] ❌ Error processing message event:`, err);
+        console.error(`[Listener] Message event error:`, err);
       }
     });
+
+    // Added: Fast Polling as a robust fallback for problematic large channels
+    const pollingInterval = setInterval(async () => {
+      if (!messageListeners.has(sessionId)) {
+        clearInterval(pollingInterval);
+        return;
+      }
+      
+      try {
+        const tasks = await storage.getTasks();
+        const sessionTasks = tasks.filter(t => t.sessionId === sessionId && t.isActive);
+        for (const task of sessionTasks) {
+          if (task.sourceChannels && task.sourceChannels.length > 0) {
+            console.log(`[Polling] 🔄 Fallback fetch for task ${task.id} (${task.name})`);
+            // Standardize channel IDs for polling
+            const standardizedChannels = task.sourceChannels.map(id => {
+              const sId = id.toString().trim();
+              if (/^\d+$/.test(sId) && sId.length > 5 && !sId.startsWith("-100") && !sId.startsWith("-")) {
+                return "-100" + sId;
+              }
+              return sId;
+            });
+            await fetchLastMessages(task.id, standardizedChannels);
+          }
+        }
+      } catch (err) {
+        console.error(`[Polling] Error for session ${sessionId}:`, err);
+      }
+    }, 2 * 60 * 1000); // Poll every 2 minutes for faster updates during testing
+
   } catch (err) {
-    console.error(`[Listener] ❌ Error starting message listener for session ${sessionId}:`, err);
+    console.error(`[Listener] Listener start error for session ${sessionId}:`, err);
   }
 }
 
@@ -399,7 +380,7 @@ export async function startAllMessageListeners() {
     try {
       await startMessageListener(session.id);
     } catch (err) {
-      console.error(`[Listener] Failed to start listener for session ${session.id}:`, err);
+      console.error(`[Listener] Failed to start for session ${session.id}:`, err);
     }
   }
 }
