@@ -202,27 +202,20 @@ export async function resolveChannelId(sessionId: number, identifier: string): P
 
 // Track the application start time for polling filters
 const appStartTime = Math.floor(Date.now() / 1000);
+// Cache for processed message IDs to prevent duplicates
+const processedMessageIds = new Set<string>();
 
 export async function fetchLastMessages(taskId: number, channelIds: string[]) {
   try {
     const task = await storage.getTask(taskId);
-    if (!task) {
-      console.log(`[Telegram] ⚠️ Task ${taskId} not found for manual fetch`);
-      return;
-    }
+    if (!task) return;
 
     const client = await getTelegramClient(task.sessionId);
-    if (!client) {
-      console.log(`[Telegram] ⚠️ No active client for session ${task.sessionId}`);
-      return;
-    }
-
-    console.log(`[Telegram] 🔍 Starting manual fetch for task ${taskId} (${task.name}) - Channels: ${channelIds.join(', ')}`);
+    if (!client) return;
 
     for (const channelId of channelIds) {
       try {
         const sId = channelId.toString().trim();
-        
         let entity;
         try {
           entity = await client.getEntity(sId);
@@ -230,13 +223,22 @@ export async function fetchLastMessages(taskId: number, channelIds: string[]) {
           entity = sId;
         }
 
-        // Increase limit slightly to ensure we catch messages if many are posted
         const messages = await client.getMessages(entity, { limit: 5 });
         
         for (const msg of messages) {
-          // Strictly only process messages published after the bot started
-          if (msg.date >= appStartTime) {
-            console.log(`[Telegram] 📝 Processing NEW msg ID ${msg.id} from ${sId} (Post-Start)`);
+          const messageKey = `${taskId}_${sId}_${msg.id}`;
+          
+          // Only process messages published after start and not already processed
+          if (msg.date >= appStartTime && !processedMessageIds.has(messageKey)) {
+            console.log(`[Telegram] 📝 Processing NEW msg ID ${msg.id} from ${sId}`);
+            processedMessageIds.add(messageKey);
+            
+            // Keep the set size manageable
+            if (processedMessageIds.size > 10000) {
+              const firstKey = processedMessageIds.values().next().value;
+              if (firstKey) processedMessageIds.delete(firstKey);
+            }
+            
             await processIncomingMessage(task, msg, sId, client);
           }
         }
