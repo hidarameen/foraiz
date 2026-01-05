@@ -401,6 +401,16 @@ export async function resolveChannelId(sessionId: number, identifier: string): P
 
     // 2. Handle Public Links and Usernames
     const cleanIdentifier = identifier.replace("https://t.me/", "").replace("@", "");
+    
+    // Check if it's already a numeric ID
+    if (/^-?\d+$/.test(cleanIdentifier)) {
+      let resolvedId = cleanIdentifier;
+      if (resolvedId.length > 5 && !resolvedId.startsWith("-100") && !resolvedId.startsWith("-")) {
+        resolvedId = "-100" + resolvedId;
+      }
+      return resolvedId;
+    }
+
     const entity = await client.getEntity(cleanIdentifier);
     
     // GramJS returns numeric IDs for channels that need to be prefixed with -100

@@ -466,10 +466,22 @@ ${rewriteRules}
       if (/^\d+$/.test(destination) && destination.length > 5 && !destination.startsWith("-")) {
         target = "-100" + destination;
         console.log(`[Forwarder] 🔄 Standardizing destination ${destination} -> ${target}`);
+      } else if (destination.startsWith("-100") || destination.startsWith("-")) {
+        target = destination;
+      } else {
+        // Handle cases where it might be a username (though resolveChannelId should have handled it)
+        target = destination;
       }
 
       console.log(`[Forwarder] Sending text message to ${target}`);
-      const entity = await client.getEntity(target);
+      let entity;
+      try {
+        entity = await client.getEntity(target);
+      } catch (e) {
+        console.warn(`[Forwarder] getEntity failed for ${target}, trying to send directly:`, (e as Error).message);
+        entity = target;
+      }
+      
       const messageOptions: any = {};
 
       if (metadata?.entities) {
