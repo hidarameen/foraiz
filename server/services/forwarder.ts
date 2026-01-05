@@ -485,10 +485,16 @@ ${rewriteRules}
             // Ensure no other flags override this
             mediaOptions.silent = mediaOptions.silent || false;
             // Strip entities if AI rewrite happened to avoid auto-link detection
+            // Note: This must be the VERY last operation before sending
             if (taskOptions?.aiRewrite?.isEnabled) {
               mediaOptions.formattingEntities = [];
             }
           }
+
+          console.log(`[Forwarder] FINAL CALL: client.sendMessage to ${target} with options:`, JSON.stringify({
+            isDisabled: taskOptions?.linkPreview === false,
+            hasEntities: !!mediaOptions.formattingEntities?.length
+          }));
 
           await client.sendMessage(target, mediaOptions);
           console.log(`[Forwarder] Media sent successfully to ${target}`);
@@ -539,19 +545,19 @@ ${rewriteRules}
         // Ensure no other flags override this
         messageOptions.silent = messageOptions.silent || false;
         // Strip URLs or entities that might trigger preview if AI rewrite happened
+        // Note: This must be the VERY last operation before sending
         if (options?.aiRewrite?.isEnabled) {
           messageOptions.formattingEntities = [];
           messageOptions.parseMode = undefined;
         }
       }
 
-      if (metadata?.entities) {
-        messageOptions.formattingEntities = metadata.entities;
-      } else {
-        messageOptions.parseMode = "html";
-      }
-
       const finalMessage = (content && content.trim().length > 0) ? content : " .";
+
+      console.log(`[Forwarder] FINAL CALL: client.sendMessage to ${target} with options:`, JSON.stringify({
+        isDisabled: options?.linkPreview === false,
+        hasEntities: !!messageOptions.formattingEntities?.length
+      }));
 
       const result = await client.sendMessage(entity, {
         message: finalMessage,
