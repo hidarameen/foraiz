@@ -488,6 +488,8 @@ ${rewriteRules}
             // Note: This must be the VERY last operation before sending
             if (taskOptions?.aiRewrite?.isEnabled) {
               mediaOptions.formattingEntities = [];
+              // Also strip entities from mediaCaption if they were detected
+              mediaCaption = mediaCaption.replace(/(https?:\/\/[^\s]+)/g, (url: string) => url);
             }
           }
 
@@ -549,6 +551,8 @@ ${rewriteRules}
         if (options?.aiRewrite?.isEnabled) {
           messageOptions.formattingEntities = [];
           messageOptions.parseMode = undefined;
+          // Clean the message from any HTML-like structures that might trigger auto-parsing
+          content = content.replace(/(https?:\/\/[^\s]+)/g, (url: string) => url);
         }
       }
 
