@@ -368,17 +368,9 @@ export class MessageForwarder {
           console.log(`[Forwarder] Media is a WebPage preview, skipping sending as file and sending as text instead`);
         } else {
           const taskOptions = (metadata?.task?.options || task?.options) as any;
-          let mediaCaption = metadata.originalText || content;
           
-          if (taskOptions?.aiRewrite?.isEnabled && mediaCaption) {
-            mediaCaption = await this.rewriteWithAI(
-              (metadata?.task as Task) || task,
-              mediaCaption,
-              taskOptions.aiRewrite.provider,
-              taskOptions.aiRewrite.model,
-              taskOptions.aiRewrite.rules || []
-            );
-          }
+          // Use the pre-processed content directly instead of re-processing
+          let mediaCaption = content;
 
           console.log(`[Forwarder] Executing client.sendMessage for media to ${target}. Link preview options:`, { isDisabled: taskOptions?.linkPreview === false });
           
@@ -397,12 +389,12 @@ export class MessageForwarder {
             (mediaOptions as any).link_preview = { is_disabled: true };
             // Ensure no other flags override this
             mediaOptions.silent = mediaOptions.silent || false;
-            // Strip entities if AI rewrite happened to avoid auto-link detection
-            // Note: This must be the VERY last operation before sending
-            if (taskOptions?.aiRewrite?.isEnabled) {
+            
+            // If content was rewritten or link preview disabled, strip entities to avoid auto-link
+            if (taskOptions?.aiRewrite?.isEnabled || taskOptions?.linkPreview === false) {
               mediaOptions.formattingEntities = [];
-              // Also strip entities from mediaCaption if they were detected
               mediaCaption = mediaCaption.replace(/(https?:\/\/[^\s]+)/g, (url: string) => url);
+              mediaOptions.message = mediaCaption;
             }
           }
 
