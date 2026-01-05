@@ -54,7 +54,9 @@ export class OpenAIProvider {
 
     try {
       const isOModel = model.startsWith('o1') || model.startsWith('o3') || model.startsWith('o4');
-      const tokenParam = isOModel ? 'max_completion_tokens' : 'max_tokens';
+      const isGpt5Model = model.startsWith('gpt-5');
+      const useNewTokenParam = isOModel || isGpt5Model;
+      const tokenParam = useNewTokenParam ? 'max_completion_tokens' : 'max_tokens';
       
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -70,7 +72,7 @@ export class OpenAIProvider {
               content: prompt
             }
           ],
-          temperature: isOModel ? 1 : 0.3, // o-models often require temperature 1
+          temperature: (isOModel || isGpt5Model) ? 1 : 0.3, // o-models and gpt-5 often require temperature 1
           [tokenParam]: 4000
         })
       });
