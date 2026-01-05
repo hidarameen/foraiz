@@ -355,8 +355,9 @@ export async function startMessageListener(sessionId: number) {
         const chatId = chatIdRaw.toString();
         const cleanChatId = chatId.replace(/^-100/, "").replace(/^-/, "");
 
-        const tasks = await storage.getTasks();
-        const sessionTasks = tasks.filter(t => t.sessionId === sessionId && t.isActive);
+        // Only fetch tasks for THIS session to avoid cross-session processing
+        const allTasks = await storage.getTasks();
+        const sessionTasks = allTasks.filter(t => t.sessionId === sessionId && t.isActive && t.status === 'running');
 
         for (const task of sessionTasks) {
           const sourceChannels = (task.sourceChannels || []).map(s => s.replace(/^-100/, "").replace(/^-/, ""));
@@ -367,13 +368,13 @@ export async function startMessageListener(sessionId: number) {
             
             // Check if already processed by polling or another task update
             if (processedMessages.has(messageKey)) {
-              console.log(`[Telegram] [Updates] ⏩ Message ID ${message.id} for task ${task.id} already processed, skipping`);
+              console.log(`[Telegram] [Session ${sessionId}] [Updates] ⏩ Message ID ${message.id} for task ${task.id} already processed, skipping`);
               continue;
             }
 
             // Mark as processed immediately
             processedMessages.set(messageKey, Date.now());
-            console.log(`[Telegram] [Updates] 🚀 Message ID ${message.id} for task ${task.id} received via UPDATES`);
+            console.log(`[Telegram] [Session ${sessionId}] [Updates] 🚀 Message ID ${message.id} for task ${task.id} received via UPDATES`);
 
             if (message.groupedId) {
               const groupId = message.groupedId.toString();
@@ -398,7 +399,7 @@ export async function startMessageListener(sessionId: number) {
           }
         }
       } catch (err) {
-        console.error(`[Listener] Message event error:`, err);
+        console.error(`[Telegram] [Session ${sessionId}] [Listener] Message event error:`, err);
       }
     });
 
@@ -410,12 +411,11 @@ export async function startMessageListener(sessionId: number) {
       
       try {
         const tasks = await storage.getTasks();
-        // Use a Set for faster lookup of active task sessions
-        const activeTaskIds = Array.from(new Set(tasks.filter(t => t.isActive && t.sessionId === sessionId).map(t => t.id)));
+        // filter tasks for this session that are active
+        const sessionTasks = tasks.filter(t => t.isActive && t.sessionId === sessionId);
         
-        for (const taskId of activeTaskIds) {
-          const task = tasks.find(t => t.id === taskId);
-          if (task && task.sourceChannels && task.sourceChannels.length > 0) {
+        for (const task of sessionTasks) {
+          if (task.sourceChannels && task.sourceChannels.length > 0) {
             console.log(`[Polling] [Session ${sessionId}] 🔄 Fallback fetch for task ${task.id} (${task.name})`);
             // Standardize channel IDs for polling
             const standardizedChannels = task.sourceChannels.map(id => {
@@ -441,9 +441,17 @@ export async function startMessageListener(sessionId: number) {
 export async function startAllMessageListeners() {
   const sessions = await storage.getSessions();
   const tasks = await storage.getTasks();
-  const activeTaskSessionIds = new Set(tasks.filter(t => t.isActive).map(t => t.sessionId));
+  
+  // Create a unique set of session IDs that have at least one active task
+  const activeTaskSessionIds = new Set(
+    tasks
+      .filter(t => t.isActive && t.status === 'running')
+      .map(t => t.sessionId)
+  );
+  
   const activeSessions = sessions.filter(s => s.isActive && activeTaskSessionIds.has(s.id));
 
+  console.log(`[Telegram] [Startup] 🚀 Initializing listeners for ${activeSessions.length} active sessions`);
   for (const session of activeSessions) {
     try {
       await startMessageListener(session.id);
