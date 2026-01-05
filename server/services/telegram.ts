@@ -453,6 +453,7 @@ export async function fetchLastMessages(taskId: number, channelIds: string[]) {
     
     for (const channelId of channelIds) {
       try {
+        console.log(`[Telegram] 🔄 Attempting manual fetch for channel: ${channelId}`);
         const entity = await client.getEntity(channelId);
         const messages = await client.getMessages(entity, { limit: 5 });
         
@@ -462,14 +463,7 @@ export async function fetchLastMessages(taskId: number, channelIds: string[]) {
           // Manually trigger the event handler logic by simulating an event
           console.log(`[Telegram] 📝 Last message from ${channelId} [ID:${msg.id}]: ${msg.message?.substring(0, 50)}...`);
           
-          // Construct a simulated event to trigger forwarder
-          const simulatedEvent = {
-            message: msg,
-            chatId: channelId
-          };
-          
           // Re-trigger the processing logic for this message
-          // This ensures we actually forward it to the destinations
           await processIncomingMessage(task, msg, channelId, client);
         }
       } catch (e) {

@@ -168,6 +168,13 @@ export class MessageForwarder {
         let finalContent = content;
         const options = task.options as any;
 
+        // Ensure destination is standardized before check
+        let target: string = destination;
+        if (/^\d+$/.test(destination) && destination.length > 5 && !destination.startsWith("-")) {
+          target = "-100" + destination;
+          console.log(`[Forwarder] 🔄 Normalizing destination ${destination} -> ${target}`);
+        }
+
         // 1. إعادة صياغة الرسالة بالذكاء الاصطناعي (AI Rewrite)
         if (options?.aiRewrite?.isEnabled) {
           console.log(`[Forwarder] AI Rewrite triggered for task ${task.id}. Content length: ${finalContent?.length || 0}`);
@@ -262,7 +269,7 @@ ${rewriteRules}
 
         const result = await this.sendToDestination(
           task.sessionId,
-          destination,
+          target,
           finalContent,
           {
             ...metadata,
