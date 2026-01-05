@@ -200,6 +200,9 @@ export async function resolveChannelId(sessionId: number, identifier: string): P
   }
 }
 
+// Track the application start time for polling filters
+const appStartTime = Math.floor(Date.now() / 1000);
+
 export async function fetchLastMessages(taskId: number, channelIds: string[]) {
   try {
     const task = await storage.getTask(taskId);
@@ -219,28 +222,21 @@ export async function fetchLastMessages(taskId: number, channelIds: string[]) {
     for (const channelId of channelIds) {
       try {
         const sId = channelId.toString().trim();
-        console.log(`[Telegram] 🔄 Fetching messages for: ${sId}`);
         
         let entity;
         try {
           entity = await client.getEntity(sId);
         } catch (e) {
-          console.warn(`[Telegram] ⚠️ getEntity failed for ${sId}, trying direct fetch:`, (e as Error).message);
           entity = sId;
         }
 
-        // Fetch only 1 message instead of 10 to minimize getting old history
-        const messages = await client.getMessages(entity, { limit: 1 });
-        console.log(`[Telegram] 📥 Fetched ${messages.length} messages from ${sId}`);
+        // Increase limit slightly to ensure we catch messages if many are posted
+        const messages = await client.getMessages(entity, { limit: 5 });
         
-        const now = Math.floor(Date.now() / 1000);
-        // Reduce the window to 1 minute to strictly fetch only brand new messages
-        const oneMinuteAgo = now - 60;
-
         for (const msg of messages) {
-          // Strictly only process messages from the very last minute
-          if (msg.date >= oneMinuteAgo) {
-            console.log(`[Telegram] 📝 Processing NEW msg ID ${msg.id} from ${sId}`);
+          // Strictly only process messages published after the bot started
+          if (msg.date >= appStartTime) {
+            console.log(`[Telegram] 📝 Processing NEW msg ID ${msg.id} from ${sId} (Post-Start)`);
             await processIncomingMessage(task, msg, sId, client);
           }
         }
