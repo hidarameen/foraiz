@@ -438,11 +438,13 @@ ${rewriteRules}
             );
           }
 
+          console.log(`[Forwarder] Executing client.sendMessage for media to ${target}`);
           await client.sendMessage(target, {
             file: media,
             message: mediaCaption,
             formattingEntities: metadata.entities
           });
+          console.log(`[Forwarder] Media sent successfully to ${target}`);
           
           return {
             messageId: metadata.originalMessageId?.toString() || "media",
@@ -461,6 +463,7 @@ ${rewriteRules}
         console.log(`[Forwarder] 🔄 Standardizing destination ${destination} -> ${target}`);
       }
 
+      console.log(`[Forwarder] Sending text message to ${target}`);
       const entity = await client.getEntity(target);
       const messageOptions: any = {};
 
