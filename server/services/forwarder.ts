@@ -372,7 +372,10 @@ export class MessageForwarder {
           // Use the pre-processed content directly instead of re-processing
           let mediaCaption = content;
 
-          console.log(`[Forwarder] Executing client.sendMessage for media to ${target}. Link preview options:`, { isDisabled: taskOptions?.linkPreview === false });
+          // Fix: Check for both boolean false and string 'false'
+          const isLinkPreviewDisabled = taskOptions?.linkPreview === false || taskOptions?.linkPreview === 'false';
+
+          console.log(`[Forwarder] Executing client.sendMessage for media to ${target}. Link preview options:`, { isDisabled: isLinkPreviewDisabled });
           
           const mediaOptions: any = {
             file: media,
@@ -380,7 +383,7 @@ export class MessageForwarder {
             formattingEntities: metadata.entities
           };
 
-          if (taskOptions?.linkPreview === false) {
+          if (isLinkPreviewDisabled) {
             // Comprehensive link preview disabling for GramJS
             mediaOptions.linkPreview = { isDisabled: true };
             mediaOptions.linkPreviewOptions = { isDisabled: true };
@@ -390,16 +393,15 @@ export class MessageForwarder {
             // Ensure no other flags override this
             mediaOptions.silent = mediaOptions.silent || false;
             
-            // If content was rewritten or link preview disabled, strip entities to avoid auto-link
-            if (taskOptions?.aiRewrite?.isEnabled || taskOptions?.linkPreview === false) {
-              mediaOptions.formattingEntities = [];
-              mediaCaption = mediaCaption.replace(/(https?:\/\/[^\s]+)/g, (url: string) => url);
-              mediaOptions.message = mediaCaption;
-            }
+            // Fix: CRITICAL - Remove all entities and sanitize caption to prevent auto-link detection
+            mediaOptions.formattingEntities = [];
+            mediaOptions.entities = [];
+            mediaCaption = mediaCaption.replace(/(https?:\/\/[^\s]+)/g, (url: string) => url);
+            mediaOptions.message = mediaCaption;
           }
 
           console.log(`[Forwarder] FINAL CALL: client.sendMessage to ${target} with options:`, JSON.stringify({
-            isDisabled: taskOptions?.linkPreview === false,
+            isDisabled: isLinkPreviewDisabled,
             hasEntities: !!mediaOptions.formattingEntities?.length
           }));
 
@@ -440,9 +442,12 @@ export class MessageForwarder {
       const messageOptions: any = {};
       const options = (metadata?.task?.options || task?.options) as any;
 
-      console.log(`[Forwarder] Sending text message to ${target}. Link preview options:`, { isDisabled: options?.linkPreview === false });
+      // Fix: Check for both boolean false and string 'false'
+      const isLinkPreviewDisabled = options?.linkPreview === false || options?.linkPreview === 'false';
 
-      if (options?.linkPreview === false) {
+      console.log(`[Forwarder] Sending text message to ${target}. Link preview options:`, { isDisabled: isLinkPreviewDisabled });
+
+      if (isLinkPreviewDisabled) {
         // Comprehensive link preview disabling for GramJS
         messageOptions.linkPreview = { isDisabled: true };
         messageOptions.linkPreviewOptions = { isDisabled: true };
@@ -455,6 +460,7 @@ export class MessageForwarder {
         // CRITICAL: Always strip entities if linkPreview is disabled, 
         // regardless of whether AI rewrite happened.
         messageOptions.formattingEntities = [];
+        messageOptions.entities = [];
         messageOptions.parseMode = undefined;
         
         // Clean the message from any HTML-like structures that might trigger auto-parsing
@@ -464,7 +470,7 @@ export class MessageForwarder {
       const finalMessage = (content && content.trim().length > 0) ? content : " .";
 
       console.log(`[Forwarder] FINAL CALL: client.sendMessage to ${target} with options:`, JSON.stringify({
-        isDisabled: options?.linkPreview === false,
+        isDisabled: isLinkPreviewDisabled,
         hasEntities: !!messageOptions.formattingEntities?.length
       }));
 
