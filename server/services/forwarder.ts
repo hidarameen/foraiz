@@ -39,17 +39,12 @@ export class MessageForwarder {
     if (activeRules.length === 0) return content;
 
     console.log(`[Forwarder] AI Rewrite processing message for task ${task.id}`);
-    const prompt = `القواعد المطلوبة لإعادة الصياغة:
-${activeRules}
+    const prompt = `${activeRules}
 
 الرسالة الأصلية: "${content}"
 
 المطلوب منك:
-إعادة صياغة الرسالة بالكامل وتطبيق القواعد عليها، والرد بنص الرسالة الجديد فقط دون أي مقدمات أو شروحات.`;
-
-    try {
-      const allConfigs = await storage.getAIConfigs();
-      let aiConfig = allConfigs.find(c => c.provider === provider && c.isActive);
+إعادة صياغة الرسالة بالكامل وتطبيق القواعد المذكورة أعلاه عليها، والرد بنص الرسالة الجديد فقط دون أي مقدمات أو شروحات.`;
       if (!aiConfig) aiConfig = allConfigs.find(c => c.isActive);
       
       const apiKey = aiConfig?.apiKey || (aiConfig?.provider ? process.env[`${aiConfig.provider.toUpperCase()}_API_KEY`] : process.env[`${provider.toUpperCase()}_API_KEY`]);
@@ -185,16 +180,12 @@ ${rewriteRules}
 إعادة صياغة الرسالة بالكامل وتطبيق القواعد عليها، والرد بنص الرسالة الجديد فقط دون أي مقدمات أو شروحات.`;
 
             try {
-              // Get all active configs to find the first working one
-              const allConfigs = await storage.getAIConfigs();
-              
-              // Try to find the specific provider first, but fallback to any active provider if needed
-              let aiConfig = allConfigs.find(c => c.provider === options.aiRewrite.provider && c.isActive);
-              
-              // If the requested provider isn't active, try to find ANY active provider
-              if (!aiConfig) {
-                aiConfig = allConfigs.find(c => c.isActive);
-              }
+            const prompt = `${rewriteRules}
+
+الرسالة الأصلية: "${finalContent}"
+
+المطلوب منك:
+إعادة صياغة الرسالة بالكامل وتطبيق القواعد المذكورة أعلاه عليها، والرد بنص الرسالة الجديد فقط دون أي مقدمات أو شروحات.`;
               
               const apiKey = aiConfig?.apiKey || (aiConfig?.provider ? process.env[`${aiConfig.provider.toUpperCase()}_API_KEY`] : process.env[`${options.aiRewrite.provider.toUpperCase()}_API_KEY`]);
 
