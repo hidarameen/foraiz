@@ -316,6 +316,7 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
       options: task?.options || { 
         withCaption: true, 
         dropAuthor: false,
+        linkPreview: true,
         aiRewrite: {
           isEnabled: false,
           provider: "openai",
@@ -979,6 +980,38 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
                         />
                       </div>
                     ))}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="options" className="border rounded-3xl bg-muted/20 px-6 overflow-hidden border-primary/5 shadow-inner">
+                <AccordionTrigger className="hover:no-underline py-6 font-black text-xl text-primary flex gap-3 flex-row-reverse">
+                  <div className="p-2 bg-primary/10 rounded-xl"><Settings className="w-5 h-5" /></div>
+                  خيارات إضافية
+                </AccordionTrigger>
+                <AccordionContent className="pb-8 pt-4">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 bg-muted/30 rounded-xl border border-muted-foreground/10">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-primary/10 rounded-lg text-primary">
+                          <Play className="w-4 h-4" />
+                        </div>
+                        <div className="flex flex-col text-right">
+                          <Label className="text-sm font-bold">معاينة الروابط</Label>
+                          <span className="text-xs text-muted-foreground">تفعيل أو تعطيل معاينة الروابط في الرسائل المرسلة</span>
+                        </div>
+                      </div>
+                      <Controller
+                        name="options.linkPreview"
+                        control={form.control}
+                        render={({ field }) => (
+                          <Switch
+                            checked={field.value !== false}
+                            onCheckedChange={field.onChange}
+                          />
+                        )}
+                      />
+                    </div>
                   </div>
                 </AccordionContent>
               </AccordionItem>
