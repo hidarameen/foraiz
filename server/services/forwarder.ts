@@ -221,9 +221,6 @@ export class MessageForwarder {
 
         results.push(result);
       } catch (error) {
-        // ... (Error handling remains same)
-      }
-    }
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
         
         await storage.createLog({
