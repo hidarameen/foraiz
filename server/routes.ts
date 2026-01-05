@@ -117,6 +117,21 @@ export async function registerRoutes(
   );
 
   // 3. Application Routes
+  app.post("/api/tasks/:id/fetch", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const task = await storage.getTask(id);
+      if (!task) return res.status(404).json({ message: "Task not found" });
+      
+      const { fetchLastMessages } = await import("./services/telegram");
+      // Run in background
+      fetchLastMessages(id, task.sourceChannels).catch(console.error);
+      
+      res.json({ message: "Manual fetch triggered" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
 
   // === SESSIONS ===
   app.get(api.sessions.list.path, async (req, res) => {

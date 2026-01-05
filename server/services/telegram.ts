@@ -441,6 +441,40 @@ export async function resolveChannelId(sessionId: number, identifier: string): P
   }
 }
 
+export async function fetchLastMessages(taskId: number, channelIds: string[]) {
+  try {
+    const task = await storage.getTask(taskId);
+    if (!task) throw new Error("Task not found");
+
+    const client = await getTelegramClient(task.sessionId);
+    if (!client) throw new Error("No active client for session");
+
+    console.log(`[Telegram] 🔍 Manual fetch for task ${taskId}: channels [${channelIds.join(', ')}]`);
+    
+    for (const channelId of channelIds) {
+      try {
+        const entity = await client.getEntity(channelId);
+        const messages = await client.getMessages(entity, { limit: 5 });
+        
+        console.log(`[Telegram] 📥 Fetched ${messages.length} messages from ${channelId}`);
+        
+        for (const msg of messages) {
+          // Manually trigger the event handler logic by simulating an event
+          // This is a bit complex, so we'll just log them for now to prove we can see them
+          console.log(`[Telegram] 📝 Last message from ${channelId} [ID:${msg.id}]: ${msg.message?.substring(0, 50)}...`);
+          
+          // To actually forward them, we'd need to call the forwarder logic
+          // For this test, we just want to prove we can see the messages
+        }
+      } catch (e) {
+        console.error(`[Telegram] ❌ Failed to fetch from ${channelId}:`, (e as Error).message);
+      }
+    }
+  } catch (err) {
+    console.error(`[Telegram] Error in manual fetch:`, err);
+  }
+}
+
 export async function stopMessageListener(sessionId: number) {
   if (!messageListeners.has(sessionId)) return;
   
