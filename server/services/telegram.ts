@@ -210,6 +210,7 @@ const appStartTime = Math.floor(Date.now() / 1000);
 // Cache for processed message IDs to prevent duplicates
 // Using a Map of messageKey -> timestamp to allow for TTL-like cleanup
 const processedMessages = new Map<string, number>();
+const processingLocks = new Set<string>();
 
 export async function fetchLastMessages(taskId: number, channelIds: string[]) {
   try {
@@ -235,23 +236,28 @@ export async function fetchLastMessages(taskId: number, channelIds: string[]) {
         for (const msg of messages) {
           const messageKey = `${taskId}_${cleanSId}_${msg.id}`;
           
-          // Check if already processed (by updates or previous polling)
-          if (processedMessages.has(messageKey)) {
+          // Check if already processed OR currently being processed
+          if (processedMessages.has(messageKey) || processingLocks.has(messageKey)) {
             continue;
           }
 
           // Only process messages published after start
           if (msg.date >= appStartTime) {
             console.log(`[Telegram] [Polling] 🔍 Message ID ${msg.id} for task ${taskId} NOT FOUND in Updates - Processing via POLLING`);
+            processingLocks.add(messageKey);
             processedMessages.set(messageKey, Date.now());
             
-            // Keep the cache manageable
-            if (processedMessages.size > 10000) {
-              const oldestKey = processedMessages.keys().next().value;
-              if (oldestKey) processedMessages.delete(oldestKey);
+            try {
+              // Keep the cache manageable
+              if (processedMessages.size > 10000) {
+                const oldestKey = processedMessages.keys().next().value;
+                if (oldestKey) processedMessages.delete(oldestKey);
+              }
+              
+              await processIncomingMessage(task, msg, sId, client);
+            } finally {
+              processingLocks.delete(messageKey);
             }
-            
-            await processIncomingMessage(task, msg, sId, client);
           }
         }
       } catch (e) {
@@ -366,36 +372,41 @@ export async function startMessageListener(sessionId: number) {
             // Include task.id in the key to prevent conflicts between different tasks for the same message
             const messageKey = `${task.id}_${cleanChatId}_${message.id}`;
             
-            // Check if already processed by polling or another task update
-            if (processedMessages.has(messageKey)) {
-              console.log(`[Telegram] [Session ${sessionId}] [Updates] ⏩ Message ID ${message.id} for task ${task.id} already processed, skipping`);
+            // Check if already processed OR currently being processed
+            if (processedMessages.has(messageKey) || processingLocks.has(messageKey)) {
+              console.log(`[Telegram] [Session ${sessionId}] [Updates] ⏩ Message ID ${message.id} for task ${task.id} already processed or in progress, skipping`);
               continue;
             }
 
-            // Mark as processed immediately
+            // Lock and mark as processed immediately
+            processingLocks.add(messageKey);
             processedMessages.set(messageKey, Date.now());
             console.log(`[Telegram] [Session ${sessionId}] [Updates] 🚀 Message ID ${message.id} for task ${task.id} received via UPDATES`);
 
-            if (message.groupedId) {
-              const groupId = message.groupedId.toString();
-              const existingBuffer = albumBuffers.get(groupId);
-              if (existingBuffer) {
-                clearTimeout(existingBuffer.timer);
-                existingBuffer.messageIds.push(message.id);
-                existingBuffer.timer = setTimeout(() => processAlbum(groupId), 3000);
-              } else {
-                albumBuffers.set(groupId, {
-                  messageIds: [message.id],
-                  timer: setTimeout(() => processAlbum(groupId), 3000),
-                  task,
-                  sessionId,
-                  chatId
-                });
+            try {
+              if (message.groupedId) {
+                const groupId = message.groupedId.toString();
+                const existingBuffer = albumBuffers.get(groupId);
+                if (existingBuffer) {
+                  clearTimeout(existingBuffer.timer);
+                  existingBuffer.messageIds.push(message.id);
+                  existingBuffer.timer = setTimeout(() => processAlbum(groupId), 3000);
+                } else {
+                  albumBuffers.set(groupId, {
+                    messageIds: [message.id],
+                    timer: setTimeout(() => processAlbum(groupId), 3000),
+                    task,
+                    sessionId,
+                    chatId
+                  });
+                }
+                continue;
               }
-              continue;
-            }
 
-            await processIncomingMessage(task, message, chatId, client);
+              await processIncomingMessage(task, message, chatId, client);
+            } finally {
+              processingLocks.delete(messageKey);
+            }
           }
         }
       } catch (err) {
