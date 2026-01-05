@@ -222,6 +222,7 @@ export async function fetchLastMessages(taskId: number, channelIds: string[]) {
     for (const channelId of channelIds) {
       try {
         const sId = channelId.toString().trim();
+        const cleanSId = sId.replace(/^-100/, "").replace(/^-/, "");
         let entity;
         try {
           entity = await client.getEntity(sId);
@@ -232,17 +233,16 @@ export async function fetchLastMessages(taskId: number, channelIds: string[]) {
         const messages = await client.getMessages(entity, { limit: 5 });
         
         for (const msg of messages) {
-          const messageKey = `${taskId}_${sId}_${msg.id}`;
+          const messageKey = `${taskId}_${cleanSId}_${msg.id}`;
           
           // Check if already processed (by updates or previous polling)
           if (processedMessages.has(messageKey)) {
-            // No need to log skipped messages to avoid clutter, but we can if detailed logs are needed
             continue;
           }
 
           // Only process messages published after start
           if (msg.date >= appStartTime) {
-            console.log(`[Telegram] [Polling] 🔍 Message ID ${msg.id} from ${sId} NOT FOUND in Updates - Processing via POLLING`);
+            console.log(`[Telegram] [Polling] 🔍 Message ID ${msg.id} for task ${taskId} NOT FOUND in Updates - Processing via POLLING`);
             processedMessages.set(messageKey, Date.now());
             
             // Keep the cache manageable
@@ -353,17 +353,18 @@ export async function startMessageListener(sessionId: number) {
           const sourceChannels = (task.sourceChannels || []).map(s => s.replace(/^-100/, "").replace(/^-/, ""));
           
           if (sourceChannels.includes(cleanChatId)) {
-            const messageKey = `${task.id}_${chatId}_${message.id}`;
+            // Include task.id in the key to prevent conflicts between different tasks for the same message
+            const messageKey = `${task.id}_${cleanChatId}_${message.id}`;
             
-            // Check if already processed by polling
+            // Check if already processed by polling or another task update
             if (processedMessages.has(messageKey)) {
-              console.log(`[Telegram] ⏩ Update for msg ID ${message.id} already processed by polling, skipping`);
+              console.log(`[Telegram] [Updates] ⏩ Message ID ${message.id} for task ${task.id} already processed, skipping`);
               continue;
             }
 
-            // Mark as processed by updates
+            // Mark as processed immediately
             processedMessages.set(messageKey, Date.now());
-            console.log(`[Telegram] [Updates] 🚀 Message ID ${message.id} from ${chatId} received via UPDATES`);
+            console.log(`[Telegram] [Updates] 🚀 Message ID ${message.id} for task ${task.id} received via UPDATES`);
 
             if (message.groupedId) {
               const groupId = message.groupedId.toString();
