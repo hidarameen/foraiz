@@ -151,21 +151,10 @@ export class MessageForwarder {
       return results; // Stop if task doesn't exist to avoid FK errors
     }
     const filters = (taskData?.filters || task.filters) as any;
-    const aiFiltersConfig = filters?.aiFilters;
-    const rulesForMode = aiFiltersConfig?.mode === 'whitelist' 
-      ? (aiFiltersConfig?.whitelistRules || [])
-      : (aiFiltersConfig?.blacklistRules || []);
-    console.log(`[Forwarder] Processing message ${messageId} for task ${task.id}. AI Rules count (${aiFiltersConfig?.mode}): ${rulesForMode.length || 0}`);
-    if (rulesForMode && rulesForMode.length > 0) {
-      console.log(`[Forwarder] Active Rule 1 Instruction: "${rulesForMode[0].instruction}"`);
-    }
     const filterResult = await this.applyFilters(content, filters, { ...metadata, taskId: task.id });
     
-    console.log(`[Forwarder] Filter analysis completed for message ${messageId}. Result: ${filterResult.allowed ? 'ALLOWED' : 'BLOCKED'}`);
-
     if (!filterResult.allowed) {
       console.log(`[Forwarder] Message ${messageId} skipped by filters for task "${task.name}": ${filterResult.reason}`);
-      
       await storage.createLog({
         taskId: task.id,
         sourceChannel: metadata?.fromChatId?.toString() || task.sourceChannels[0],
@@ -174,114 +163,38 @@ export class MessageForwarder {
         status: "skipped",
         details: filterResult.reason || "Filtered by criteria",
       });
-
       return results;
     }
 
-    // معالجة كل وجهة
+    // --- تحسين توفير الموارد: معالجة النص مرة واحدة قبل التوزيع ---
+    let finalContent = content;
+    const options = (taskData?.options || task.options) as any;
+
+    // 1. إعادة صياغة الرسالة بالذكاء الاصطناعي (AI Rewrite) - تتم مرة واحدة فقط للمهمة
+    if (options?.aiRewrite?.isEnabled && finalContent && finalContent.trim().length > 0) {
+      console.log(`[Forwarder] AI Rewrite (Optimized) triggered for task ${task.id}`);
+      const rules = Array.isArray(options.aiRewrite.rules) ? options.aiRewrite.rules : [];
+      finalContent = await this.rewriteWithAI(
+        taskData || task,
+        finalContent,
+        options.aiRewrite.provider || 'openai',
+        options.aiRewrite.model || 'gpt-4o',
+        rules
+      );
+    }
+
+    // 2. إضافة التوقيع - يتم مرة واحدة فقط
+    if (options?.addSignature) {
+      finalContent = this.addSignature(finalContent, options.addSignature);
+    }
+
+    // معالجة كل وجهة باستخدام النص الجاهز
     for (const destination of task.destinationChannels) {
       try {
-        // تطبيق التنسيقات والخيارات الخاصة بالمهمة
-        let finalContent = content;
-        const options = task.options as any;
-
-        // Ensure destination is standardized before check
+        // Ensure destination is standardized
         let target: string = destination;
         if (/^\d+$/.test(destination) && destination.length > 5 && !destination.startsWith("-")) {
           target = "-100" + destination;
-          console.log(`[Forwarder] 🔄 Normalizing destination ${destination} -> ${target}`);
-        }
-
-        // 1. إعادة صياغة الرسالة بالذكاء الاصطناعي (AI Rewrite)
-        if (options?.aiRewrite?.isEnabled) {
-          console.log(`[Forwarder] AI Rewrite triggered for task ${task.id}. Content length: ${finalContent?.length || 0}`);
-          const rules = Array.isArray(options.aiRewrite.rules) ? options.aiRewrite.rules : [];
-          const rewriteRules = rules
-            .filter((r: any) => r && r.isActive && r.name && r.instruction)
-            .map((r: any) => `- ${r.name}: ${r.instruction}`)
-            .join('\n');
-
-          if (rewriteRules.length > 0 && finalContent && finalContent.trim().length > 0) {
-            console.log(`[Forwarder] AI Rewrite processing message with ${rules.filter((r:any)=>r.isActive).length} active rules`);
-            const prompt = `القواعد المطلوبة لإعادة الصياغة:
-${rewriteRules}
-
-الرسالة الأصلية: "${finalContent}"
-
-المطلوب منك:
-إعادة صياغة الرسالة بالكامل وتطبيق القواعد عليها، والرد بنص الرسالة الجديد فقط دون أي مقدمات أو شروحات.`;
-
-            try {
-              const allConfigs = await storage.getAIConfigs();
-              // Try to find OpenAI config as it is the most reliable for rewriting
-              let aiConfig = allConfigs.find(c => c.provider === 'openai' && c.isActive);
-              if (!aiConfig) aiConfig = allConfigs.find(c => c.isActive);
-              
-              const providerToUse = aiConfig?.provider || options.aiRewrite.provider || 'openai';
-              const modelToUse = (providerToUse === 'openai') ? 'gpt-4o' : (options.aiRewrite.model || 'gpt-4o');
-              const apiKey = aiConfig?.apiKey || process.env[`${providerToUse.toUpperCase()}_API_KEY`];
-
-              if (apiKey) {
-                console.log(`[Forwarder] AI Rewrite Start - Task: ${task.id}, Provider: ${providerToUse}, Model: ${modelToUse}`);
-                
-                await storage.createLog({
-                  taskId: task.id,
-                  sourceChannel: "AI Service",
-                  destinationChannel: "Processing",
-                  messageId: `ai_rewrite_${Date.now()}`,
-                  status: "info",
-                  details: `بدء إعادة صياغة النص (خيار المهمة) باستخدام ${providerToUse}`,
-                });
-
-                const rewritten = await AIService.chat(providerToUse, modelToUse, prompt, apiKey);
-                const rewrittenStr = typeof rewritten === 'string' ? rewritten : (rewritten as any)?.message || "";
-                if (rewrittenStr && rewrittenStr.trim().length > 0) {
-                  finalContent = rewrittenStr.trim();
-                  console.log(`[Forwarder] AI Rewrite Success for task ${task.id}. Content length: ${finalContent.length}`);
-                } else {
-                  console.log(`[Forwarder] AI Rewrite returned empty or invalid response:`, rewritten);
-                  await storage.createLog({
-                    taskId: task.id,
-                    sourceChannel: "AI Service",
-                    destinationChannel: "Warning",
-                    messageId: `ai_warn_${Date.now()}`,
-                    status: "failed",
-                    details: "رد الذكاء الاصطناعي كان فارغاً، تم استخدام النص الأصلي",
-                  });
-                }
-              } else {
-                const errorMsg = `API Key not found for provider: ${options.aiRewrite.provider}`;
-                console.error(`[Forwarder] ${errorMsg}`);
-                await storage.createLog({
-                  taskId: task.id,
-                  sourceChannel: "AI Service",
-                  destinationChannel: "Error",
-                  messageId: `ai_error_${Date.now()}`,
-                  status: "failed",
-                  details: `فشل العثور على مفتاح API لـ ${options.aiRewrite.provider}`,
-                });
-              }
-            } catch (error) {
-              const errorMsg = error instanceof Error ? error.message : "Unknown error";
-              console.error(`[Forwarder] AI Rewrite failed for task ${task.id}:`, error);
-              await storage.createLog({
-                taskId: task.id,
-                sourceChannel: "AI Service",
-                destinationChannel: "Error",
-                messageId: `ai_error_${Date.now()}`,
-                status: "failed",
-                details: `فشل إعادة الصياغة: ${errorMsg}`,
-              });
-            }
-          } else {
-            const rulesLength = options.aiRewrite.rules?.length || 0;
-            const activeRulesLength = (options.aiRewrite.rules || []).filter((r:any) => r.isActive).length;
-            console.log(`[Forwarder] AI Rewrite skipped: Rules length: ${rulesLength}, Active: ${activeRulesLength}, Content length: ${finalContent.trim().length}`);
-          }
-        }
-
-        if (options?.addSignature) {
-          finalContent = this.addSignature(finalContent, options.addSignature);
         }
 
         const result = await this.sendToDestination(
@@ -308,6 +221,9 @@ ${rewriteRules}
 
         results.push(result);
       } catch (error) {
+        // ... (Error handling remains same)
+      }
+    }
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
         
         await storage.createLog({
