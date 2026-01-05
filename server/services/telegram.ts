@@ -35,16 +35,21 @@ export async function getTelegramClient(sessionId: number): Promise<TelegramClie
     { connectionRetries: 5, useWSS: false }
   );
 
-  await client.connect();
-  activeClients.set(sessionId, client);
-
   try {
+    await client.connect();
+    activeClients.set(sessionId, client);
     await client.getMe();
     // Force subscription to large channel updates
     await client.getDialogs({ limit: 100 });
     console.log(`[Telegram] ✅ Connection stabilized and dialogs fetched for session ${sessionId}`);
-  } catch (e) {
-    console.warn(`[Telegram] ⚠️ Connection stabilization failed for session ${sessionId}:`, (e as Error).message);
+  } catch (e: any) {
+    console.error(`[Telegram] ❌ Critical failure for session ${sessionId}:`, e.message);
+    if (e.message.includes("AUTH_KEY_DUPLICATED")) {
+       console.error(`[Telegram] ⚠️ Session ${sessionId} has duplicated auth key. Marking as inactive.`);
+       await storage.updateSession(sessionId, { isActive: false }).catch(console.error);
+    }
+    activeClients.delete(sessionId);
+    return null;
   }
 
   return client;

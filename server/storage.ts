@@ -19,6 +19,7 @@ export interface IStorage {
   getSessions(): Promise<Session[]>;
   getSession(id: number): Promise<Session | undefined>;
   createSession(session: InsertSession): Promise<Session>;
+  updateSession(id: number, updates: Partial<InsertSession>): Promise<Session>;
   deleteSession(id: number): Promise<void>;
 
   // Tasks
@@ -68,6 +69,16 @@ export class DatabaseStorage implements IStorage {
 
   async createSession(insertSession: InsertSession): Promise<Session> {
     const [session] = await db.insert(sessions).values(insertSession).returning();
+    return session;
+  }
+
+  async updateSession(id: number, updates: Partial<InsertSession>): Promise<Session> {
+    const [session] = await db
+      .update(sessions)
+      .set(updates)
+      .where(eq(sessions.id, id))
+      .returning();
+    if (!session) throw new Error("Session not found");
     return session;
   }
 
