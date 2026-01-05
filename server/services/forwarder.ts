@@ -61,16 +61,45 @@ ${activeRules}
       if (apiKey) {
         const providerToUse = (aiConfig?.provider || provider) as any;
         console.log(`[Forwarder] AI Rewrite Request - Task: ${task.id}, Provider: ${providerToUse}, Model: ${model}`);
+        
+        await storage.createLog({
+          taskId: task.id,
+          sourceChannel: "AI Service",
+          destinationChannel: "Processing",
+          messageId: `ai_rewrite_${Date.now()}`,
+          status: "info",
+          details: `بدء إعادة الصياغة باستخدام ${providerToUse} (${model})`,
+        });
+
         const response = await AIService.chat(providerToUse, model, prompt, apiKey);
         const rewrittenStr = typeof response === 'string' ? response : (response as any)?.message || "";
         if (rewrittenStr && rewrittenStr.trim().length > 0) {
+          console.log(`[Forwarder] AI Rewrite Success - Task: ${task.id}`);
           return rewrittenStr.trim();
         }
       } else {
-        console.error(`[Forwarder] AI Rewrite skipped: API Key not found for ${provider}`);
+        const errorMsg = `API Key not found for ${provider}`;
+        console.error(`[Forwarder] AI Rewrite skipped: ${errorMsg}`);
+        await storage.createLog({
+          taskId: task.id,
+          sourceChannel: "AI Service",
+          destinationChannel: "Error",
+          messageId: `ai_error_${Date.now()}`,
+          status: "failed",
+          details: `فشل العثور على مفتاح API لـ ${provider}`,
+        });
       }
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
       console.error(`[Forwarder] AI Rewrite failed for task ${task.id}:`, error);
+      await storage.createLog({
+        taskId: task.id,
+        sourceChannel: "AI Service",
+        destinationChannel: "Error",
+        messageId: `ai_error_${Date.now()}`,
+        status: "failed",
+        details: `خطأ في معالجة الذكاء الاصطناعي: ${errorMsg}`,
+      });
     }
     
     return content;
@@ -179,6 +208,16 @@ ${rewriteRules}
                 // Use the provider from the found config if we fell back, otherwise use the requested one
                 const providerToUse = aiConfig?.provider || options.aiRewrite.provider;
                 console.log(`[Forwarder] AI Rewrite Start - Task: ${task.id}, Provider: ${providerToUse}, Model: ${options.aiRewrite.model}`);
+                
+                await storage.createLog({
+                  taskId: task.id,
+                  sourceChannel: "AI Service",
+                  destinationChannel: "Processing",
+                  messageId: `ai_rewrite_${Date.now()}`,
+                  status: "info",
+                  details: `بدء إعادة صياغة النص (خيار المهمة) باستخدام ${providerToUse}`,
+                });
+
                 const rewritten = await AIService.chat(providerToUse, options.aiRewrite.model, prompt, apiKey);
                 const rewrittenStr = typeof rewritten === 'string' ? rewritten : (rewritten as any)?.message || "";
                 if (rewrittenStr && rewrittenStr.trim().length > 0) {
@@ -186,12 +225,38 @@ ${rewriteRules}
                   console.log(`[Forwarder] AI Rewrite Success for task ${task.id}. Content length: ${finalContent.length}`);
                 } else {
                   console.log(`[Forwarder] AI Rewrite returned empty or invalid response:`, rewritten);
+                  await storage.createLog({
+                    taskId: task.id,
+                    sourceChannel: "AI Service",
+                    destinationChannel: "Warning",
+                    messageId: `ai_warn_${Date.now()}`,
+                    status: "failed",
+                    details: "رد الذكاء الاصطناعي كان فارغاً، تم استخدام النص الأصلي",
+                  });
                 }
               } else {
-                console.error(`[Forwarder] API Key not found for provider: ${options.aiRewrite.provider}`);
+                const errorMsg = `API Key not found for provider: ${options.aiRewrite.provider}`;
+                console.error(`[Forwarder] ${errorMsg}`);
+                await storage.createLog({
+                  taskId: task.id,
+                  sourceChannel: "AI Service",
+                  destinationChannel: "Error",
+                  messageId: `ai_error_${Date.now()}`,
+                  status: "failed",
+                  details: `فشل العثور على مفتاح API لـ ${options.aiRewrite.provider}`,
+                });
               }
             } catch (error) {
+              const errorMsg = error instanceof Error ? error.message : "Unknown error";
               console.error(`[Forwarder] AI Rewrite failed for task ${task.id}:`, error);
+              await storage.createLog({
+                taskId: task.id,
+                sourceChannel: "AI Service",
+                destinationChannel: "Error",
+                messageId: `ai_error_${Date.now()}`,
+                status: "failed",
+                details: `فشل إعادة الصياغة: ${errorMsg}`,
+              });
             }
           } else {
             const rulesLength = options.aiRewrite.rules?.length || 0;
@@ -539,8 +604,16 @@ ${rulesDescription}
 
           if (apiKey) {
             console.log(`[Forwarder] AI Request Start - Provider: ${aiConfig?.provider || aiFilters.provider}, Model: ${aiFilters.model}, Mode: ${aiFilters.mode}`);
-            console.log(`[Forwarder] AI Prompt sent:\n${prompt}`);
             
+            await storage.createLog({
+              taskId: metadata?.taskId || 0,
+              sourceChannel: "AI Filter",
+              destinationChannel: "Processing",
+              messageId: `ai_filter_${Date.now()}`,
+              status: "info",
+              details: `بدء فحص المحتوى بالذكاء الاصطناعي (وضع: ${aiFilters.mode})`,
+            });
+
             const startTime = Date.now();
             const response = await AIService.chat(aiConfig?.provider || aiFilters.provider, aiFilters.model, prompt, apiKey);
             const duration = Date.now() - startTime;
@@ -554,7 +627,7 @@ ${rulesDescription}
             } else if (response && typeof response === 'object') {
               decision = (response as any).message?.toUpperCase() || JSON.stringify(response).toUpperCase();
             }
-            
+
             console.log(`[Forwarder] AI Normalized Decision: ${decision}`);
             
             // Normalize decision string
@@ -563,21 +636,70 @@ ${rulesDescription}
             if (upperDecision.includes("BLOCK")) {
               const reason = decision.split('|')[1]?.trim() || "محتوى غير مرغوب فيه";
               console.log(`[Forwarder] AI Decision: BLOCK, Reason: ${reason}`);
+              
+              await storage.createLog({
+                taskId: metadata?.taskId || 0,
+                sourceChannel: "AI Filter",
+                destinationChannel: "Blocked",
+                messageId: `ai_blocked_${Date.now()}`,
+                status: "skipped",
+                details: `تم الحظر: ${reason}`,
+              });
+
               return { allowed: false, reason: `حظر بواسطة الذكاء الاصطناعي: ${reason}` };
             }
             
             if (aiFilters.mode === 'whitelist' && !upperDecision.includes("ALLOW")) {
-              console.log(`[Forwarder] AI Decision: BLOCK (Whitelist failure)`);
-              return { allowed: false, reason: "حظر بواسطة الذكاء الاصطناعي: لم يطابق قواعد السماح (Whitelist)" };
+              const reason = "لم يطابق قواعد السماح (Whitelist)";
+              console.log(`[Forwarder] AI Decision: BLOCK (${reason})`);
+              
+              await storage.createLog({
+                taskId: metadata?.taskId || 0,
+                sourceChannel: "AI Filter",
+                destinationChannel: "Blocked",
+                messageId: `ai_blocked_wl_${Date.now()}`,
+                status: "skipped",
+                details: `تم الحظر: ${reason}`,
+              });
+
+              return { allowed: false, reason: `حظر بواسطة الذكاء الاصطناعي: ${reason}` };
             }
             
+            const allowReason = decision.split('|')[1]?.trim() || "مطابق للقواعد";
             console.log(`[Forwarder] AI Decision: ALLOW`);
+            
+            await storage.createLog({
+              taskId: metadata?.taskId || 0,
+              sourceChannel: "AI Filter",
+              destinationChannel: "Allowed",
+              messageId: `ai_allowed_${Date.now()}`,
+              status: "info",
+              details: `تم السماح: ${allowReason}`,
+            });
+
           } else {
-            console.error(`[Forwarder] AI Filter enabled but no active API key found for ${aiFilters.provider} in database or environment`);
-            // Fallback: If AI is mandatory but fails due to config, we might want to log it
+            const errorMsg = `API Key not found for provider: ${aiFilters.provider}`;
+            console.error(`[Forwarder] ${errorMsg}`);
+            await storage.createLog({
+              taskId: metadata?.taskId || 0,
+              sourceChannel: "AI Filter",
+              destinationChannel: "Error",
+              messageId: `ai_error_${Date.now()}`,
+              status: "failed",
+              details: `فشل فحص الفلتر: لم يتم العثور على مفتاح API لـ ${aiFilters.provider}`,
+            });
           }
         } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : "Unknown error";
           console.error(`[Forwarder] AI Filtering failed:`, error);
+          await storage.createLog({
+            taskId: metadata?.taskId || 0,
+            sourceChannel: "AI Filter",
+            destinationChannel: "Error",
+            messageId: `ai_error_${Date.now()}`,
+            status: "failed",
+            details: `خطأ في فحص الفلتر: ${errorMsg}`,
+          });
         }
         }
       }

@@ -31,6 +31,19 @@ export const AI_CONFIG = {
 
 export class AIService {
   static async chat(provider: AIProvider, model: string, prompt: string, apiKey: string) {
+    console.log(`[AIService] Sending request to ${provider} using model ${model}`);
+    try {
+      const response = await this.executeChat(provider, model, prompt, apiKey);
+      console.log(`[AIService] Received response from ${provider}`);
+      return response;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      console.error(`[AIService] Error from ${provider}:`, errorMsg);
+      throw error;
+    }
+  }
+
+  private static async executeChat(provider: AIProvider, model: string, prompt: string, apiKey: string) {
     switch (provider) {
       case 'openai':
         return OpenAIProvider.chat(model, prompt, apiKey);
