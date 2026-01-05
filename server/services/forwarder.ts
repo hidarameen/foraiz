@@ -467,13 +467,21 @@ ${rewriteRules}
             );
           }
 
-          console.log(`[Forwarder] Executing client.sendMessage for media to ${target}`);
-          await client.sendMessage(target, {
-            file: media,
-            message: mediaCaption,
-            formattingEntities: metadata.entities
-          });
-          console.log(`[Forwarder] Media sent successfully to ${target}`);
+        console.log(`[Forwarder] Executing client.sendMessage for media to ${target}`);
+        
+        const mediaOptions: any = {
+          file: media,
+          message: mediaCaption,
+          formattingEntities: metadata.entities
+        };
+
+        const taskOptions = (metadata?.task?.options || task?.options) as any;
+        if (taskOptions?.linkPreview === false) {
+          mediaOptions.linkPreviewOptions = { isDisabled: true };
+        }
+
+        await client.sendMessage(target, mediaOptions);
+        console.log(`[Forwarder] Media sent successfully to ${target}`);
           
           return {
             messageId: metadata.originalMessageId?.toString() || "media",
