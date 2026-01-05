@@ -532,7 +532,7 @@ client.addEventHandler(async (event: any) => {
         console.log(`[Listener] Checking task ${currentTask.id} against sources: ${currentTask.sourceChannels.join(', ')}`);
 
         const matchesChannel = currentTask.sourceChannels.some(sourceId => {
-          const cleanSourceId = sourceId.replace(/^-100/, "");
+          const cleanSourceId = sourceId.toString().replace(/^-100/, "");
           const isMatch = cleanSourceId === cleanChatId;
           if (isMatch) console.log(`[Listener] ✅ Match found for Task ${currentTask.id}: Source ${cleanSourceId} === Chat ${cleanChatId}`);
           return isMatch;
