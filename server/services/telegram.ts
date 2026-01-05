@@ -37,6 +37,15 @@ export async function getTelegramClient(sessionId: number): Promise<TelegramClie
 
   await client.connect();
   activeClients.set(sessionId, client);
+
+  // CRITICAL: Call getMe() to ensure Telegram pushes updates for large channels
+  try {
+    await client.getMe();
+    console.log(`[Telegram] ✅ Connection stabilized for session ${sessionId}`);
+  } catch (e) {
+    console.warn(`[Telegram] ⚠️ getMe failed for session ${sessionId}:`, (e as Error).message);
+  }
+
   return client;
 }
 
