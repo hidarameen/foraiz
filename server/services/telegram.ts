@@ -44,9 +44,9 @@ export async function getTelegramClient(sessionId: number): Promise<TelegramClie
     console.log(`[Telegram] ✅ Connection stabilized and dialogs fetched for session ${sessionId}`);
   } catch (e: any) {
     console.error(`[Telegram] ❌ Critical failure for session ${sessionId}:`, e.message);
-    if (e.message.includes("AUTH_KEY_DUPLICATED")) {
-       console.error(`[Telegram] ⚠️ Session ${sessionId} has duplicated auth key. Marking as inactive.`);
-       await storage.updateSession(sessionId, { isActive: false }).catch(console.error);
+    if (e.message.includes("AUTH_KEY_DUPLICATED") || e.message.includes("SESSION_REVOKED") || e.message.includes("SESSION_EXPIRED")) {
+       console.error(`[Telegram] ⚠️ Session ${sessionId} is invalid. Deleting session and linked tasks.`);
+       await storage.deleteSession(sessionId).catch(console.error);
     }
     activeClients.delete(sessionId);
     return null;

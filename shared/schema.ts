@@ -38,7 +38,7 @@ export const sessions = pgTable("sessions", {
 export const tasks = pgTable("tasks", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  sessionId: integer("session_id").references(() => sessions.id).notNull(),
+  sessionId: integer("session_id").references(() => sessions.id, { onDelete: "cascade" }).notNull(),
   
   // Source & Destination
   sourceChannels: text("source_channels").array().notNull(), // List of Chat IDs or Usernames
@@ -132,7 +132,7 @@ export const tasks = pgTable("tasks", {
 // Logs for forwarded messages
 export const logs = pgTable("logs", {
   id: serial("id").primaryKey(),
-  taskId: integer("task_id").references(() => tasks.id),
+  taskId: integer("task_id").references(() => tasks.id, { onDelete: "cascade" }),
   sourceChannel: text("source_channel"),
   destinationChannel: text("destination_channel"),
   messageId: text("message_id"), // Original Message ID
