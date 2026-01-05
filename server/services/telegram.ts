@@ -328,6 +328,15 @@ export async function startMessageListener(sessionId: number) {
       if (!buffer) return;
       const { messageIds, task, chatId } = buffer;
       albumBuffers.delete(groupId);
+      
+      // Use a lock/key for albums too
+      const albumKey = `album_${task.id}_${chatId}_${groupId}`;
+      if (processedMessages.has(albumKey)) {
+        console.log(`[Telegram] [Album] ⏩ Album ${groupId} for task ${task.id} already processed, skipping`);
+        return;
+      }
+      processedMessages.set(albumKey, Date.now());
+
       try {
         const { forwarder } = await import("./forwarder");
         await forwarder.forwardAlbum(task, messageIds, chatId);
@@ -384,6 +393,7 @@ export async function startMessageListener(sessionId: number) {
               }
               continue;
             }
+
             await processIncomingMessage(task, message, chatId, client);
           }
         }
