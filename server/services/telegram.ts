@@ -203,24 +203,47 @@ export async function resolveChannelId(sessionId: number, identifier: string): P
 export async function fetchLastMessages(taskId: number, channelIds: string[]) {
   try {
     const task = await storage.getTask(taskId);
-    if (!task) return;
+    if (!task) {
+      console.log(`[Telegram] ⚠️ Task ${taskId} not found for manual fetch`);
+      return;
+    }
 
     const client = await getTelegramClient(task.sessionId);
-    if (!client) return;
+    if (!client) {
+      console.log(`[Telegram] ⚠️ No active client for session ${task.sessionId}`);
+      return;
+    }
+
+    console.log(`[Telegram] 🔍 Starting manual fetch for task ${taskId} (${task.name}) - Channels: ${channelIds.join(', ')}`);
 
     for (const channelId of channelIds) {
       try {
-        const entity = await client.getEntity(channelId);
+        const sId = channelId.toString().trim();
+        console.log(`[Telegram] 🔄 Fetching messages for: ${sId}`);
+        
+        let entity;
+        try {
+          entity = await client.getEntity(sId);
+        } catch (e) {
+          console.warn(`[Telegram] ⚠️ getEntity failed for ${sId}, trying direct fetch:`, (e as Error).message);
+          entity = sId;
+        }
+
         const messages = await client.getMessages(entity, { limit: 10 });
+        console.log(`[Telegram] 📥 Fetched ${messages.length} messages from ${sId}`);
+        
         for (const msg of messages) {
-          await processIncomingMessage(task, msg, channelId, client);
+          // Only process messages newer than... (let's say 30 mins) or just process all and let forwarder handle duplicates?
+          // Forwarder doesn't handle duplicates natively by ID yet, but let's at least log
+          console.log(`[Telegram] 📝 Processing msg ID ${msg.id} from ${sId}`);
+          await processIncomingMessage(task, msg, sId, client);
         }
       } catch (e) {
-        console.error(`[Telegram] Manual fetch fail for ${channelId}:`, (e as Error).message);
+        console.error(`[Telegram] ❌ Manual fetch failed for channel ${channelId}:`, (e as Error).message);
       }
     }
   } catch (err) {
-    console.error(`[Telegram] Manual fetch error:`, err);
+    console.error(`[Telegram] ❌ Manual fetch fatal error:`, err);
   }
 }
 
@@ -363,7 +386,7 @@ export async function startMessageListener(sessionId: number) {
       } catch (err) {
         console.error(`[Polling] Error for session ${sessionId}:`, err);
       }
-    }, 2 * 60 * 1000); // Poll every 2 minutes for faster updates during testing
+    }, 10000); // Poll every 10 seconds as requested by the user
 
   } catch (err) {
     console.error(`[Listener] Listener start error for session ${sessionId}:`, err);

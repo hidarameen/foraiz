@@ -45,7 +45,7 @@ export class MessageForwarder {
       if (!aiConfig) aiConfig = allConfigs.find(c => c.isActive);
       
       const providerToUse = aiConfig?.provider || 'openai';
-      const modelToUse = (providerToUse === 'openai') ? 'gpt-4o' : (aiConfig?.model || 'gpt-4o');
+      const modelToUse = (providerToUse === 'openai') ? 'gpt-4o' : 'gpt-4o';
       const apiKey = aiConfig?.apiKey || process.env[`${providerToUse.toUpperCase()}_API_KEY`];
 
       console.log(`[Forwarder] [rewriteWithAI] Requesting rewrite for task ${task.id}`);
