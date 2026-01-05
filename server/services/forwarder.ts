@@ -507,6 +507,11 @@ ${rewriteRules}
       }
       
       const messageOptions: any = {};
+      const options = (metadata?.task?.options || task?.options) as any;
+
+      if (options?.linkPreview === false) {
+        messageOptions.linkPreviewOptions = { isDisabled: true };
+      }
 
       if (metadata?.entities) {
         messageOptions.formattingEntities = metadata.entities;

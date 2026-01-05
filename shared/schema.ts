@@ -100,6 +100,7 @@ export const tasks = pgTable("tasks", {
     dropAuthor?: boolean; // Send as copy vs forward
     delaySeconds?: number;
     addSignature?: string; // Custom footer text
+    linkPreview?: boolean; // Enable/disable link preview
     spoilerText?: boolean; // Force spoiler?
     aiRewrite?: {
       isEnabled: boolean;
