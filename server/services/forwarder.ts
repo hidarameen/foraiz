@@ -19,6 +19,8 @@ export interface ForwardingResult {
  * معالج التوجيه الأساسي
  */
 export class MessageForwarder {
+  private taskProcessedMessages = new Set<string>();
+
   /**
    * إعادة صياغة النص باستخدام الذكاء الاصطناعي
    */
@@ -114,6 +116,21 @@ export class MessageForwarder {
     metadata?: Record<string, any>
   ): Promise<ForwardingResult[]> {
     const results: ForwardingResult[] = [];
+
+    // Check if message was already processed for this specific task
+    // Use task ID and message ID to prevent double forwarding
+    const taskMsgKey = `task_${task.id}_msg_${messageId}`;
+    if (this.taskProcessedMessages.has(taskMsgKey)) {
+      console.log(`[Forwarder] ⏩ Message ${messageId} already processed by forwarder for task ${task.id}, skipping`);
+      return [];
+    }
+    this.taskProcessedMessages.add(taskMsgKey);
+    
+    // Keep cache manageable (TTL-like)
+    if (this.taskProcessedMessages.size > 10000) {
+      const firstKey = this.taskProcessedMessages.values().next().value;
+      if (firstKey) this.taskProcessedMessages.delete(firstKey);
+    }
 
     // التحقق من نشاط المهمة
     if (!task.isActive) {

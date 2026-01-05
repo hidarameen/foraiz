@@ -304,7 +304,8 @@ async function processIncomingMessage(task: any, message: any, chatId: string, c
     else if (message.poll) mediaType = "poll";
     
     const { forwarder } = await import("./forwarder");
-    for (const destination of currentTask.destinationChannels) {
+    const dests = Array.isArray(currentTask.destinationChannels) ? currentTask.destinationChannels : [];
+    for (const destination of dests) {
       await forwarder.forwardMessage(
         currentTask,
         message.id?.toString() || `msg_${Date.now()}`,
@@ -406,7 +407,7 @@ export async function startMessageListener(sessionId: number) {
             // Lock and mark as processed immediately
             processingLocks.add(messageKey);
             processedMessages.set(messageKey, Date.now());
-            console.log(`[Telegram] [Session ${sessionId}] [Updates] 🚀 Message ID ${message.id} for task ${task.id} received via UPDATES`);
+            console.log(`[Telegram] [Session ${sessionId}] [Updates] 🚀 Message ID ${message.id} for task ${task.id} (Version: ${taskVersions.get(task.id) || 0}) received via UPDATES`);
 
             try {
               if (message.groupedId) {
