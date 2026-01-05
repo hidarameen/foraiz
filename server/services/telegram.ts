@@ -304,7 +304,11 @@ export async function stopMessageListener(sessionId: number) {
 }
 
 export async function startMessageListener(sessionId: number) {
-  if (messageListeners.has(sessionId)) return;
+  if (messageListeners.has(sessionId)) {
+    console.log(`[Telegram] [Session ${sessionId}] 🛡️ Listener already active, skipping start`);
+    return;
+  }
+  console.log(`[Telegram] [Session ${sessionId}] 🚀 Starting message listener (Updates + Polling)`);
   messageListeners.set(sessionId, true);
 
   try {
@@ -387,7 +391,6 @@ export async function startMessageListener(sessionId: number) {
       }
     });
 
-    // Added: Fast Polling as a robust fallback for problematic large channels
     const pollingInterval = setInterval(async () => {
       if (!messageListeners.has(sessionId)) {
         clearInterval(pollingInterval);
@@ -396,10 +399,13 @@ export async function startMessageListener(sessionId: number) {
       
       try {
         const tasks = await storage.getTasks();
-        const sessionTasks = tasks.filter(t => t.sessionId === sessionId && t.isActive);
-        for (const task of sessionTasks) {
-          if (task.sourceChannels && task.sourceChannels.length > 0) {
-            console.log(`[Polling] 🔄 Fallback fetch for task ${task.id} (${task.name})`);
+        // Use a Set for faster lookup of active task sessions
+        const activeTaskIds = Array.from(new Set(tasks.filter(t => t.isActive && t.sessionId === sessionId).map(t => t.id)));
+        
+        for (const taskId of activeTaskIds) {
+          const task = tasks.find(t => t.id === taskId);
+          if (task && task.sourceChannels && task.sourceChannels.length > 0) {
+            console.log(`[Polling] [Session ${sessionId}] 🔄 Fallback fetch for task ${task.id} (${task.name})`);
             // Standardize channel IDs for polling
             const standardizedChannels = task.sourceChannels.map(id => {
               const sId = id.toString().trim();
@@ -414,7 +420,7 @@ export async function startMessageListener(sessionId: number) {
       } catch (err) {
         console.error(`[Polling] Error for session ${sessionId}:`, err);
       }
-    }, 10000); // Poll every 10 seconds as requested by the user
+    }, 15000); // Poll every 15 seconds to give Updates time to arrive
 
   } catch (err) {
     console.error(`[Listener] Listener start error for session ${sessionId}:`, err);
