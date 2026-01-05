@@ -40,22 +40,24 @@ export class MessageForwarder {
 
     try {
       const allConfigs = await storage.getAIConfigs();
-      let aiConfig = allConfigs.find(c => c.provider === provider && c.isActive);
+      // Force OpenAI gpt-4o for reliability in rewriting
+      let aiConfig = allConfigs.find(c => c.provider === 'openai' && c.isActive);
+      if (!aiConfig) aiConfig = allConfigs.find(c => c.isActive);
       
-      console.log(`[Forwarder] AI Rewrite processing message for task ${task.id}`);
+      const providerToUse = aiConfig?.provider || 'openai';
+      const modelToUse = (providerToUse === 'openai') ? 'gpt-4o' : (aiConfig?.model || 'gpt-4o');
+      const apiKey = aiConfig?.apiKey || process.env[`${providerToUse.toUpperCase()}_API_KEY`];
+
+      console.log(`[Forwarder] [rewriteWithAI] Requesting rewrite for task ${task.id}`);
       const prompt = `${activeRules}
 
 الرسالة الأصلية: "${content}"
 
 المطلوب منك:
 إعادة صياغة الرسالة بالكامل وتطبيق القواعد المذكورة أعلاه عليها، والرد بنص الرسالة الجديد فقط دون أي مقدمات أو شروحات.`;
-      if (!aiConfig) aiConfig = allConfigs.find(c => c.isActive);
-      
-      const apiKey = aiConfig?.apiKey || (aiConfig?.provider ? process.env[`${aiConfig.provider.toUpperCase()}_API_KEY`] : process.env[`${provider.toUpperCase()}_API_KEY`]);
 
       if (apiKey) {
-        const providerToUse = (aiConfig?.provider || provider) as any;
-        console.log(`[Forwarder] AI Rewrite Request - Task: ${task.id}, Provider: ${providerToUse}, Model: ${model}`);
+        console.log(`[Forwarder] [rewriteWithAI] Sending request - Provider: ${providerToUse}, Model: ${modelToUse}`);
         
         await storage.createLog({
           taskId: task.id,
@@ -63,37 +65,39 @@ export class MessageForwarder {
           destinationChannel: "Processing",
           messageId: `ai_rewrite_${Date.now()}`,
           status: "info",
-          details: `بدء إعادة الصياغة باستخدام ${providerToUse} (${model})`,
+          details: `بدء إعادة صياغة النص باستخدام ${providerToUse} (${modelToUse})`,
         });
 
-        const response = await AIService.chat(providerToUse, model, prompt, apiKey);
+        const response = await AIService.chat(providerToUse as any, modelToUse, prompt, apiKey);
         const rewrittenStr = typeof response === 'string' ? response : (response as any)?.message || "";
+        
         if (rewrittenStr && rewrittenStr.trim().length > 0) {
-          console.log(`[Forwarder] AI Rewrite Success - Task: ${task.id}`);
+          console.log(`[Forwarder] [rewriteWithAI] Success - Result length: ${rewrittenStr.trim().length}`);
           return rewrittenStr.trim();
+        } else {
+          console.warn(`[Forwarder] [rewriteWithAI] Received empty response`);
+          await storage.createLog({
+            taskId: task.id,
+            sourceChannel: "AI Service",
+            destinationChannel: "Warning",
+            messageId: `ai_warn_${Date.now()}`,
+            status: "failed",
+            details: "رد الذكاء الاصطناعي كان فارغاً أثناء إعادة الصياغة",
+          });
         }
       } else {
-        const errorMsg = `API Key not found for ${provider}`;
-        console.error(`[Forwarder] AI Rewrite skipped: ${errorMsg}`);
-        await storage.createLog({
-          taskId: task.id,
-          sourceChannel: "AI Service",
-          destinationChannel: "Error",
-          messageId: `ai_error_${Date.now()}`,
-          status: "failed",
-          details: `فشل العثور على مفتاح API لـ ${provider}`,
-        });
+        console.error(`[Forwarder] [rewriteWithAI] No API Key found for ${providerToUse}`);
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
-      console.error(`[Forwarder] AI Rewrite failed for task ${task.id}:`, error);
+      console.error(`[Forwarder] [rewriteWithAI] Error:`, error);
       await storage.createLog({
         taskId: task.id,
         sourceChannel: "AI Service",
         destinationChannel: "Error",
         messageId: `ai_error_${Date.now()}`,
         status: "failed",
-        details: `خطأ في معالجة الذكاء الاصطناعي: ${errorMsg}`,
+        details: `خطأ في إعادة الصياغة: ${errorMsg}`,
       });
     }
     
@@ -185,15 +189,16 @@ ${rewriteRules}
 
             try {
               const allConfigs = await storage.getAIConfigs();
-              let aiConfig = allConfigs.find(c => c.provider === options.aiRewrite.provider && c.isActive);
+              // Try to find OpenAI config as it is the most reliable for rewriting
+              let aiConfig = allConfigs.find(c => c.provider === 'openai' && c.isActive);
               if (!aiConfig) aiConfig = allConfigs.find(c => c.isActive);
               
-              const apiKey = aiConfig?.apiKey || (aiConfig?.provider ? process.env[`${aiConfig.provider.toUpperCase()}_API_KEY`] : process.env[`${options.aiRewrite.provider.toUpperCase()}_API_KEY`]);
+              const providerToUse = aiConfig?.provider || options.aiRewrite.provider || 'openai';
+              const modelToUse = (providerToUse === 'openai') ? 'gpt-4o' : (options.aiRewrite.model || 'gpt-4o');
+              const apiKey = aiConfig?.apiKey || process.env[`${providerToUse.toUpperCase()}_API_KEY`];
 
               if (apiKey) {
-                // Use the provider from the found config if we fell back, otherwise use the requested one
-                const providerToUse = aiConfig?.provider || options.aiRewrite.provider;
-                console.log(`[Forwarder] AI Rewrite Start - Task: ${task.id}, Provider: ${providerToUse}, Model: ${options.aiRewrite.model}`);
+                console.log(`[Forwarder] AI Rewrite Start - Task: ${task.id}, Provider: ${providerToUse}, Model: ${modelToUse}`);
                 
                 await storage.createLog({
                   taskId: task.id,
@@ -204,7 +209,7 @@ ${rewriteRules}
                   details: `بدء إعادة صياغة النص (خيار المهمة) باستخدام ${providerToUse}`,
                 });
 
-                const rewritten = await AIService.chat(providerToUse, options.aiRewrite.model, prompt, apiKey);
+                const rewritten = await AIService.chat(providerToUse, modelToUse, prompt, apiKey);
                 const rewrittenStr = typeof rewritten === 'string' ? rewritten : (rewritten as any)?.message || "";
                 if (rewrittenStr && rewrittenStr.trim().length > 0) {
                   finalContent = rewrittenStr.trim();
