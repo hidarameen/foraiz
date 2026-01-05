@@ -606,7 +606,7 @@ ${rulesDescription}
             console.log(`[Forwarder] AI Request Start - Provider: ${aiConfig?.provider || aiFilters.provider}, Model: ${aiFilters.model}, Mode: ${aiFilters.mode}`);
             
             await storage.createLog({
-              taskId: metadata?.taskId || 0,
+              taskId: (metadata?.taskId as number) || 0,
               sourceChannel: "AI Filter",
               destinationChannel: "Processing",
               messageId: `ai_filter_${Date.now()}`,
@@ -633,12 +633,12 @@ ${rulesDescription}
             // Normalize decision string
             const upperDecision = decision.split('|')[0].trim().toUpperCase();
             
-            if (upperDecision.includes("BLOCK")) {
-              const reason = decision.split('|')[1]?.trim() || "محتوى غير مرغوب فيه";
+            if (decision.startsWith("BLOCK")) {
+              const reason = decision.includes("|") ? decision.split("|")[1].trim() : "حظر بواسطة فلاتر الذكاء الاصطناعي";
               console.log(`[Forwarder] AI Decision: BLOCK, Reason: ${reason}`);
               
               await storage.createLog({
-                taskId: metadata?.taskId || 0,
+                taskId: (metadata?.taskId as number) || 0,
                 sourceChannel: "AI Filter",
                 destinationChannel: "Blocked",
                 messageId: `ai_blocked_${Date.now()}`,
@@ -654,7 +654,7 @@ ${rulesDescription}
               console.log(`[Forwarder] AI Decision: BLOCK (${reason})`);
               
               await storage.createLog({
-                taskId: metadata?.taskId || 0,
+                taskId: (metadata?.taskId as number) || 0,
                 sourceChannel: "AI Filter",
                 destinationChannel: "Blocked",
                 messageId: `ai_blocked_wl_${Date.now()}`,
@@ -669,7 +669,7 @@ ${rulesDescription}
             console.log(`[Forwarder] AI Decision: ALLOW`);
             
             await storage.createLog({
-              taskId: metadata?.taskId || 0,
+              taskId: (metadata?.taskId as number) || 0,
               sourceChannel: "AI Filter",
               destinationChannel: "Allowed",
               messageId: `ai_allowed_${Date.now()}`,
