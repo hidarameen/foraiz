@@ -39,7 +39,8 @@ export class TaskScheduler {
     console.log("[Scheduler] Stopping task scheduler...");
 
     // إيقاف جميع المهام
-    for (const [, timeout] of this.activeTasks) {
+    for (const entry of Array.from(this.activeTasks.entries())) {
+      const [, timeout] = entry;
       clearInterval(timeout);
     }
     this.activeTasks.clear();

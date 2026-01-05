@@ -467,21 +467,27 @@ ${rewriteRules}
             );
           }
 
-        console.log(`[Forwarder] Executing client.sendMessage for media to ${target}`);
-        
-        const mediaOptions: any = {
-          file: media,
-          message: mediaCaption,
-          formattingEntities: metadata.entities
-        };
+          console.log(`[Forwarder] Executing client.sendMessage for media to ${target}. Link preview options:`, { isDisabled: taskOptions?.linkPreview === false });
+          
+          const mediaOptions: any = {
+            file: media,
+            message: mediaCaption,
+            formattingEntities: metadata.entities
+          };
 
-        const taskOptions = (metadata?.task?.options || task?.options) as any;
-        if (taskOptions?.linkPreview === false) {
-          mediaOptions.linkPreviewOptions = { isDisabled: true };
-        }
+          if (taskOptions?.linkPreview === false) {
+            // Comprehensive link preview disabling for GramJS
+            mediaOptions.linkPreview = { isDisabled: true };
+            mediaOptions.linkPreviewOptions = { isDisabled: true };
+            mediaOptions.noWebpage = true;
+            mediaOptions.clearDraft = true;
+            (mediaOptions as any).link_preview = { is_disabled: true };
+            // Ensure no other flags override this
+            mediaOptions.silent = mediaOptions.silent || false;
+          }
 
-        await client.sendMessage(target, mediaOptions);
-        console.log(`[Forwarder] Media sent successfully to ${target}`);
+          await client.sendMessage(target, mediaOptions);
+          console.log(`[Forwarder] Media sent successfully to ${target}`);
           
           return {
             messageId: metadata.originalMessageId?.toString() || "media",
@@ -517,8 +523,17 @@ ${rewriteRules}
       const messageOptions: any = {};
       const options = (metadata?.task?.options || task?.options) as any;
 
+      console.log(`[Forwarder] Sending text message to ${target}. Link preview options:`, { isDisabled: options?.linkPreview === false });
+
       if (options?.linkPreview === false) {
+        // Comprehensive link preview disabling for GramJS
+        messageOptions.linkPreview = { isDisabled: true };
         messageOptions.linkPreviewOptions = { isDisabled: true };
+        messageOptions.noWebpage = true;
+        messageOptions.clearDraft = true;
+        (messageOptions as any).link_preview = { is_disabled: true };
+        // Ensure no other flags override this
+        messageOptions.silent = messageOptions.silent || false;
       }
 
       if (metadata?.entities) {

@@ -227,7 +227,7 @@ export async function fetchLastMessages(taskId: number, channelIds: string[]) {
 
     // Update version if needed
     const currentVersion = taskVersions.get(taskId) || 0;
-    const dbVersion = task.updatedAt ? new Date(task.updatedAt).getTime() : 0;
+    const dbVersion = task.createdAt ? new Date(task.createdAt).getTime() : 0;
     if (dbVersion > currentVersion) {
       taskVersions.set(taskId, dbVersion);
       console.log(`[Telegram] [Version] Task ${taskId} updated to version ${dbVersion}`);

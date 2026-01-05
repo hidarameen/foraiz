@@ -824,8 +824,8 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
                               <SelectValue placeholder="اختر الموديل" />
                             </SelectTrigger>
                             <SelectContent className="text-right">
-                              {availableModels.map((m: any) => (
-                                <SelectItem key={m.id} value={m.id} className="flex-row-reverse">{m.name}</SelectItem>
+                              {availableModels.map((m: any, idx: number) => (
+                                <SelectItem key={m.id || idx} value={m.id} className="flex-row-reverse">{m.name}</SelectItem>
                               ))}
                               {availableModels.length === 0 && (
                                 <div className="p-2 text-center text-xs text-muted-foreground">لا توجد موديلات متاحة</div>
@@ -903,7 +903,7 @@ function TaskFormDialog({ task, trigger }: { task?: any, trigger?: React.ReactNo
                           return null;
                         }
                         return (
-                        <div key={field.id} className="p-4 bg-background rounded-2xl border border-blue-500/5 space-y-3 relative group hover:border-blue-500/20 transition-all">
+                        <div key={(field as any).id || index} className="p-4 bg-background rounded-2xl border border-blue-500/5 space-y-3 relative group hover:border-blue-500/20 transition-all">
                           <div className="flex items-center justify-between flex-row-reverse">
                             <div className="flex items-center gap-3 flex-row-reverse">
                               <span className="bg-blue-500/10 text-blue-500 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">{index + 1}</span>
