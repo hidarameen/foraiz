@@ -543,9 +543,19 @@ client.addEventHandler(async (event: any) => {
 
         const matchesChannel = currentTask.sourceChannels.some(sourceId => {
           const sId = sourceId.toString().trim();
-          const cleanSourceId = sId.replace(/^-100/, "");
-          const isMatch = cleanSourceId === cleanChatId || sId === chatId || sId === cleanChatId;
-          if (isMatch) console.log(`[Listener] ✅ Match found for Task ${currentTask.id}: Source ${sId} === Chat ${chatId}`);
+          
+          // Case 1: Pure numeric IDs (standardizing both to check)
+          const cleanSourceId = sId.replace(/^-100/, "").replace(/^-/, "");
+          const cleanChatId = chatId.replace(/^-100/, "").replace(/^-/, "");
+          
+          const isNumericMatch = cleanSourceId === cleanChatId;
+          const isExactMatch = sId === chatId;
+          
+          const isMatch = isNumericMatch || isExactMatch;
+          
+          if (isMatch) {
+            console.log(`[Listener] ✅ Match found for Task ${currentTask.id}: Source ${sId} === Chat ${chatId} (Clean: ${cleanSourceId} === ${cleanChatId})`);
+          }
           return isMatch;
         });
 
