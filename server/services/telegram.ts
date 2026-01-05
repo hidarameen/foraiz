@@ -532,9 +532,10 @@ client.addEventHandler(async (event: any) => {
         console.log(`[Listener] Checking task ${currentTask.id} against sources: ${currentTask.sourceChannels.join(', ')}`);
 
         const matchesChannel = currentTask.sourceChannels.some(sourceId => {
-          const cleanSourceId = sourceId.toString().replace(/^-100/, "");
-          const isMatch = cleanSourceId === cleanChatId;
-          if (isMatch) console.log(`[Listener] ✅ Match found for Task ${currentTask.id}: Source ${cleanSourceId} === Chat ${cleanChatId}`);
+          const sId = sourceId.toString().trim();
+          const cleanSourceId = sId.replace(/^-100/, "");
+          const isMatch = cleanSourceId === cleanChatId || sId === chatId || sId === cleanChatId;
+          if (isMatch) console.log(`[Listener] ✅ Match found for Task ${currentTask.id}: Source ${sId} === Chat ${chatId}`);
           return isMatch;
         });
 
