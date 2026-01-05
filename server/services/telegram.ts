@@ -355,9 +355,9 @@ export async function startMessageListener(sessionId: number) {
         const chatId = chatIdRaw.toString();
         const cleanChatId = chatId.replace(/^-100/, "").replace(/^-/, "");
 
-        // Only fetch tasks for THIS session to avoid cross-session processing
+  // Only fetch tasks for THIS session to avoid cross-session processing
         const allTasks = await storage.getTasks();
-        const sessionTasks = allTasks.filter(t => t.sessionId === sessionId && t.isActive && t.status === 'running');
+        const sessionTasks = allTasks.filter(t => t.sessionId === sessionId && t.isActive);
 
         for (const task of sessionTasks) {
           const sourceChannels = (task.sourceChannels || []).map(s => s.replace(/^-100/, "").replace(/^-/, ""));
@@ -445,7 +445,7 @@ export async function startAllMessageListeners() {
   // Create a unique set of session IDs that have at least one active task
   const activeTaskSessionIds = new Set(
     tasks
-      .filter(t => t.isActive && t.status === 'running')
+      .filter(t => t.isActive)
       .map(t => t.sessionId)
   );
   
