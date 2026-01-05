@@ -68,7 +68,7 @@ export class OpenAIProvider {
             }
           ],
           temperature: 0.3,
-          max_tokens: 500
+          max_tokens: 4000
         })
       });
 
