@@ -132,6 +132,7 @@ ${activeRules}
     const taskData = await storage.getTask(task.id);
     if (!taskData) {
       console.error(`[Forwarder] Task ${task.id} not found in database!`);
+      return results; // Stop if task doesn't exist to avoid FK errors
     }
     const filters = (taskData?.filters || task.filters) as any;
     const aiFiltersConfig = filters?.aiFilters;
@@ -142,7 +143,7 @@ ${activeRules}
     if (rulesForMode && rulesForMode.length > 0) {
       console.log(`[Forwarder] Active Rule 1 Instruction: "${rulesForMode[0].instruction}"`);
     }
-    const filterResult = await this.applyFilters(content, filters, metadata);
+    const filterResult = await this.applyFilters(content, filters, { ...metadata, taskId: task.id });
     
     console.log(`[Forwarder] Filter analysis completed for message ${messageId}. Result: ${filterResult.allowed ? 'ALLOWED' : 'BLOCKED'}`);
 
@@ -602,17 +603,21 @@ ${rulesDescription}
           
           const apiKey = aiConfig?.apiKey || (aiConfig?.provider ? process.env[`${aiConfig.provider.toUpperCase()}_API_KEY`] : process.env[`${aiFilters.provider.toUpperCase()}_API_KEY`]);
 
+          const currentTaskId = (metadata?.taskId as number) || 0;
+
           if (apiKey) {
             console.log(`[Forwarder] AI Request Start - Provider: ${aiConfig?.provider || aiFilters.provider}, Model: ${aiFilters.model}, Mode: ${aiFilters.mode}`);
             
-            await storage.createLog({
-              taskId: (metadata?.taskId as number) || 0,
-              sourceChannel: "AI Filter",
-              destinationChannel: "Processing",
-              messageId: `ai_filter_${Date.now()}`,
-              status: "info",
-              details: `بدء فحص المحتوى بالذكاء الاصطناعي (وضع: ${aiFilters.mode})`,
-            });
+            if (currentTaskId > 0) {
+              await storage.createLog({
+                taskId: currentTaskId,
+                sourceChannel: "AI Filter",
+                destinationChannel: "Processing",
+                messageId: `ai_filter_${Date.now()}`,
+                status: "info",
+                details: `بدء فحص المحتوى بالذكاء الاصطناعي (وضع: ${aiFilters.mode})`,
+              });
+            }
 
             const startTime = Date.now();
             const response = await AIService.chat(aiConfig?.provider || aiFilters.provider, aiFilters.model, prompt, apiKey);
@@ -637,14 +642,16 @@ ${rulesDescription}
               const reason = decision.includes("|") ? decision.split("|")[1].trim() : "حظر بواسطة فلاتر الذكاء الاصطناعي";
               console.log(`[Forwarder] AI Decision: BLOCK, Reason: ${reason}`);
               
-              await storage.createLog({
-                taskId: (metadata?.taskId as number) || 0,
-                sourceChannel: "AI Filter",
-                destinationChannel: "Blocked",
-                messageId: `ai_blocked_${Date.now()}`,
-                status: "skipped",
-                details: `تم الحظر: ${reason}`,
-              });
+              if (currentTaskId > 0) {
+                await storage.createLog({
+                  taskId: currentTaskId,
+                  sourceChannel: "AI Filter",
+                  destinationChannel: "Blocked",
+                  messageId: `ai_blocked_${Date.now()}`,
+                  status: "skipped",
+                  details: `تم الحظر: ${reason}`,
+                });
+              }
 
               return { allowed: false, reason: `حظر بواسطة الذكاء الاصطناعي: ${reason}` };
             }
@@ -653,14 +660,16 @@ ${rulesDescription}
               const reason = "لم يطابق قواعد السماح (Whitelist)";
               console.log(`[Forwarder] AI Decision: BLOCK (${reason})`);
               
-              await storage.createLog({
-                taskId: (metadata?.taskId as number) || 0,
-                sourceChannel: "AI Filter",
-                destinationChannel: "Blocked",
-                messageId: `ai_blocked_wl_${Date.now()}`,
-                status: "skipped",
-                details: `تم الحظر: ${reason}`,
-              });
+              if (currentTaskId > 0) {
+                await storage.createLog({
+                  taskId: currentTaskId,
+                  sourceChannel: "AI Filter",
+                  destinationChannel: "Blocked",
+                  messageId: `ai_blocked_wl_${Date.now()}`,
+                  status: "skipped",
+                  details: `تم الحظر: ${reason}`,
+                });
+              }
 
               return { allowed: false, reason: `حظر بواسطة الذكاء الاصطناعي: ${reason}` };
             }
@@ -668,38 +677,45 @@ ${rulesDescription}
             const allowReason = decision.split('|')[1]?.trim() || "مطابق للقواعد";
             console.log(`[Forwarder] AI Decision: ALLOW`);
             
-            await storage.createLog({
-              taskId: (metadata?.taskId as number) || 0,
-              sourceChannel: "AI Filter",
-              destinationChannel: "Allowed",
-              messageId: `ai_allowed_${Date.now()}`,
-              status: "info",
-              details: `تم السماح: ${allowReason}`,
-            });
+            if (currentTaskId > 0) {
+              await storage.createLog({
+                taskId: currentTaskId,
+                sourceChannel: "AI Filter",
+                destinationChannel: "Allowed",
+                messageId: `ai_allowed_${Date.now()}`,
+                status: "info",
+                details: `تم السماح: ${allowReason}`,
+              });
+            }
 
           } else {
             const errorMsg = `API Key not found for provider: ${aiFilters.provider}`;
             console.error(`[Forwarder] ${errorMsg}`);
-            await storage.createLog({
-              taskId: metadata?.taskId || 0,
-              sourceChannel: "AI Filter",
-              destinationChannel: "Error",
-              messageId: `ai_error_${Date.now()}`,
-              status: "failed",
-              details: `فشل فحص الفلتر: لم يتم العثور على مفتاح API لـ ${aiFilters.provider}`,
-            });
+            if (currentTaskId > 0) {
+              await storage.createLog({
+                taskId: currentTaskId,
+                sourceChannel: "AI Filter",
+                destinationChannel: "Error",
+                messageId: `ai_error_${Date.now()}`,
+                status: "failed",
+                details: `فشل فحص الفلتر: لم يتم العثور على مفتاح API لـ ${aiFilters.provider}`,
+              });
+            }
           }
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : "Unknown error";
           console.error(`[Forwarder] AI Filtering failed:`, error);
-          await storage.createLog({
-            taskId: metadata?.taskId || 0,
-            sourceChannel: "AI Filter",
-            destinationChannel: "Error",
-            messageId: `ai_error_${Date.now()}`,
-            status: "failed",
-            details: `خطأ في فحص الفلتر: ${errorMsg}`,
-          });
+          const currentTaskId = (metadata?.taskId as number) || 0;
+          if (currentTaskId > 0) {
+            await storage.createLog({
+              taskId: currentTaskId,
+              sourceChannel: "AI Filter",
+              destinationChannel: "Error",
+              messageId: `ai_error_${Date.now()}`,
+              status: "failed",
+              details: `خطأ في فحص الفلتر: ${errorMsg}`,
+            });
+          }
         }
         }
       }
