@@ -460,11 +460,17 @@ export async function fetchLastMessages(taskId: number, channelIds: string[]) {
         
         for (const msg of messages) {
           // Manually trigger the event handler logic by simulating an event
-          // This is a bit complex, so we'll just log them for now to prove we can see them
           console.log(`[Telegram] 📝 Last message from ${channelId} [ID:${msg.id}]: ${msg.message?.substring(0, 50)}...`);
           
-          // To actually forward them, we'd need to call the forwarder logic
-          // For this test, we just want to prove we can see the messages
+          // Construct a simulated event to trigger forwarder
+          const simulatedEvent = {
+            message: msg,
+            chatId: channelId
+          };
+          
+          // Re-trigger the processing logic for this message
+          // This ensures we actually forward it to the destinations
+          await processIncomingMessage(task, msg, channelId, client);
         }
       } catch (e) {
         console.error(`[Telegram] ❌ Failed to fetch from ${channelId}:`, (e as Error).message);
@@ -472,6 +478,45 @@ export async function fetchLastMessages(taskId: number, channelIds: string[]) {
     }
   } catch (err) {
     console.error(`[Telegram] Error in manual fetch:`, err);
+  }
+}
+
+// Helper to process incoming message (refactored from addEventHandler)
+async function processIncomingMessage(task: any, message: any, chatId: string, client: TelegramClient) {
+  try {
+    const sessionId = task.sessionId;
+    
+    // Handle Grouped Media (Albums)
+    // For manual fetch, we'll skip complex album buffering and just forward
+    
+    console.log(`[Listener] ✅ Task ${task.id} manual processing! Message from ${chatId}`);
+
+    // IN CHANNELS, THE TEXT IS OFTEN IN message.message
+    const messageText = message.message || message.text || "";
+    
+    // Detect media type for filtering
+    let mediaType = "text";
+    if (message.photo) mediaType = "photo";
+    else if (message.video) mediaType = "video";
+    else if (message.document) mediaType = "document";
+    else if (message.audio) mediaType = "audio";
+    else if (message.voice) mediaType = "voice";
+    else if (message.sticker) mediaType = "sticker";
+    else if (message.videoNote) mediaType = "videoNote";
+    else if (message.gif || message.animation) mediaType = "animation";
+    else if (message.poll) mediaType = "poll";
+    
+    const { forwarder } = await import("./forwarder");
+    for (const destination of task.destinationChannels) {
+      await forwarder.forwardMessage(
+        task,
+        message,
+        destination,
+        chatId
+      );
+    }
+  } catch (err) {
+    console.error(`[Listener] ❌ Error in processIncomingMessage:`, err);
   }
 }
 
