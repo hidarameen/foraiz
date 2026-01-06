@@ -39,6 +39,9 @@ ENV NODE_ENV=production
 ENV PORT=5000
 # Ensure we don't try to run migrations if directory isn't found in some environments
 ENV DRIZZLE_MIGRATIONS_PATH=/app/migrations
+# Fallback for Replit Auth when running outside Replit
+ENV CLIENT_ID=placeholder_client_id
+ENV ISSUER_URL=https://replit.com/oidc
 
 # Start the application
 CMD ["npm", "start"]
