@@ -17,8 +17,12 @@ if (!process.env.DATABASE_URL) {
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 export const db = drizzle(pool, { schema });
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __filename = process.env.NODE_ENV === 'production' 
+  ? ""
+  : fileURLToPath(import.meta.url);
+const __dirname = process.env.NODE_ENV === 'production'
+  ? path.resolve(process.cwd())
+  : path.dirname(__filename);
 
 // Helper to handle migrations and ensure tables exist
 export async function setupDatabase() {

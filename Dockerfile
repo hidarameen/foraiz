@@ -21,19 +21,24 @@ FROM node:20-slim
 
 WORKDIR /app
 
-# Copy built files and production dependencies
+# Install production dependencies only
+COPY package*.json ./
+RUN npm install --omit=dev
+
+# Copy built files
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/server ./server
 COPY --from=builder /app/shared ./shared
+COPY --from=builder /app/migrations ./migrations
 
-# Expose the port (Northflanks usually expects port 80 or 8080, but we'll use 5000 as per project)
+# Expose the port
 EXPOSE 5000
 
 # Set environment variables
 ENV NODE_ENV=production
 ENV PORT=5000
+# Ensure we don't try to run migrations if directory isn't found in some environments
+ENV DRIZZLE_MIGRATIONS_PATH=/app/migrations
 
 # Start the application
 CMD ["npm", "start"]
