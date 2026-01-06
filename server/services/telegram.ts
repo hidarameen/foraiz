@@ -134,39 +134,55 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
   log("INFO", phoneNumber, `SignIn attempt: phoneCodeVerified=${entry.phoneCodeVerified}, hasPassword=${!!password}`);
 
   try {
-    // If we already verified the phone code and we have a password, we can check password directly
-    // Or if start() threw PASSWORD_REQUIRED, we should retry with the password
-    await client.start({
-      phoneNumber: async () => phoneNumber,
-      phoneCode: async () => code,
-      password: async () => {
-        if (!password) {
-          log("INFO", phoneNumber, "Password required by Telegram");
-          entry.phoneCodeVerified = true;
-          throw new Error("PASSWORD_REQUIRED");
+    // If start() was already called and threw PASSWORD_REQUIRED, entry.phoneCodeVerified is true.
+    // In that case, we MUST call checkPassword or something similar, OR call start again
+    // GramJS's client.start is designed to be called once.
+    // However, if it fails with PASSWORD_REQUIRED, the client state might be waiting for a password.
+
+    return await new Promise<string>(async (resolve, reject) => {
+      try {
+        await client.start({
+          phoneNumber: async () => phoneNumber,
+          phoneCode: async () => code,
+          password: async () => {
+            if (!password) {
+              log("INFO", phoneNumber, "Password required by Telegram");
+              entry.phoneCodeVerified = true;
+              // We reject with a custom error that we catch outside
+              reject(new Error("PASSWORD_REQUIRED"));
+              return ""; 
+            }
+            log("INFO", phoneNumber, "Providing password to Telegram");
+            return password;
+          },
+          onError: (err: any) => {
+            log("ERROR", phoneNumber, `GramJS internal error: ${err.message}`);
+            if (err.message !== "PASSWORD_REQUIRED") {
+              reject(err);
+            }
+          }
+        });
+        
+        const sessionString = (client.session as StringSession).save();
+        await cleanupLoginSession(phoneNumber);
+        resolve(sessionString);
+      } catch (err: any) {
+        if (err.message === "PASSWORD_REQUIRED") {
+          reject(err);
+        } else if (err.message.includes("PASSWORD_HASH_INVALID") || err.message.includes("SRP_ID_INVALID")) {
+          log("WARN", phoneNumber, "Invalid 2FA password provided");
+          reject(new Error("INVALID_PASSWORD"));
+        } else {
+          log("ERROR", phoneNumber, `Sign in failed: ${err.message}`);
+          reject(err);
         }
-        log("INFO", phoneNumber, "Providing password to Telegram");
-        return password;
-      },
-      onError: (err: any) => {
-        log("ERROR", phoneNumber, `GramJS internal error: ${err.message}`);
-        if (err.message === "PASSWORD_REQUIRED") return;
       }
     });
-    
-    const sessionString = (client.session as StringSession).save();
-    await cleanupLoginSession(phoneNumber);
-    return sessionString;
   } catch (err: any) {
     if (err.message === "PASSWORD_REQUIRED") throw err;
+    if (err.message === "INVALID_PASSWORD") throw err;
     
-    // Check for specific 2FA errors from GramJS
-    if (err.message.includes("PASSWORD_HASH_INVALID") || err.message.includes("SRP_ID_INVALID")) {
-      log("WARN", phoneNumber, "Invalid 2FA password provided");
-      throw new Error("INVALID_PASSWORD");
-    }
-
-    log("ERROR", phoneNumber, `Sign in failed: ${err.message}`);
+    log("ERROR", phoneNumber, `Outer sign in failed: ${err.message}`);
     await cleanupLoginSession(phoneNumber);
     throw err;
   }

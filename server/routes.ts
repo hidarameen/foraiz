@@ -262,7 +262,11 @@ export async function registerRoutes(
           // Handle specific errors
           if (err.message === "PASSWORD_REQUIRED") {
             logRequest("INFO", api.sessions.login.path, "Password verification required");
-            return res.json({ status: 'password_required' });
+            // Return status AND the current code/hash so frontend can send it back
+            return res.json({ 
+              status: 'password_required',
+              phoneCodeHash: phoneCodeHash // Ensure this is available if needed
+            });
           }
           
           if (err.message === "SESSION_EXPIRED_OR_NOT_FOUND") {
