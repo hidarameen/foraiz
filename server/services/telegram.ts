@@ -131,31 +131,42 @@ export async function signIn(phoneNumber: string, code: string, password?: strin
   if (!entry) throw new Error("SESSION_EXPIRED_OR_NOT_FOUND");
 
   const { client } = entry;
+  log("INFO", phoneNumber, `SignIn attempt: phoneCodeVerified=${entry.phoneCodeVerified}, hasPassword=${!!password}`);
+
   try {
-    if (entry.phoneCodeVerified && password) {
-      await (client as any).checkPassword(password);
-    } else {
-      await client.start({
-        phoneNumber: async () => phoneNumber,
-        phoneCode: async () => code,
-        password: async () => {
-          if (!password) {
-            entry.phoneCodeVerified = true;
-            throw new Error("PASSWORD_REQUIRED");
-          }
-          return password;
-        },
-        onError: (err: any) => {
-          if (err.message === "PASSWORD_REQUIRED") return;
+    // If we already verified the phone code and we have a password, we can check password directly
+    // Or if start() threw PASSWORD_REQUIRED, we should retry with the password
+    await client.start({
+      phoneNumber: async () => phoneNumber,
+      phoneCode: async () => code,
+      password: async () => {
+        if (!password) {
+          log("INFO", phoneNumber, "Password required by Telegram");
+          entry.phoneCodeVerified = true;
+          throw new Error("PASSWORD_REQUIRED");
         }
-      });
-    }
+        log("INFO", phoneNumber, "Providing password to Telegram");
+        return password;
+      },
+      onError: (err: any) => {
+        log("ERROR", phoneNumber, `GramJS internal error: ${err.message}`);
+        if (err.message === "PASSWORD_REQUIRED") return;
+      }
+    });
     
     const sessionString = (client.session as StringSession).save();
     await cleanupLoginSession(phoneNumber);
     return sessionString;
   } catch (err: any) {
     if (err.message === "PASSWORD_REQUIRED") throw err;
+    
+    // Check for specific 2FA errors from GramJS
+    if (err.message.includes("PASSWORD_HASH_INVALID") || err.message.includes("SRP_ID_INVALID")) {
+      log("WARN", phoneNumber, "Invalid 2FA password provided");
+      throw new Error("INVALID_PASSWORD");
+    }
+
+    log("ERROR", phoneNumber, `Sign in failed: ${err.message}`);
     await cleanupLoginSession(phoneNumber);
     throw err;
   }
@@ -387,8 +398,8 @@ export async function startMessageListener(sessionId: number) {
         const sessionTasks = allTasks.filter(t => t.sessionId === sessionId && t.isActive);
 
         for (const task of sessionTasks) {
-          // Sync version
-          const dbVersion = task.updatedAt ? new Date(task.updatedAt).getTime() : 0;
+          // Sync version - using createdAt as fallback since updatedAt is missing in current schema
+          const dbVersion = task.createdAt ? new Date(task.createdAt).getTime() : 0;
           if (dbVersion > (taskVersions.get(task.id) || 0)) {
             taskVersions.set(task.id, dbVersion);
           }
