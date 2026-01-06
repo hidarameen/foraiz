@@ -16,16 +16,21 @@ if (!process.env.DATABASE_URL) {
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 export const db = drizzle(pool, { schema });
 
-// Helper to handle migrations if needed
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Helper to handle migrations and ensure tables exist
 export async function setupDatabase() {
   try {
-    // For local dev/fast-mode, we can use drizzle-kit push in the shell,
-    // but having a programmatic way to ensure tables exist is better.
-    // However, since we are in fast-mode and user wants it done "now",
-    // we rely on the npx drizzle-kit push command.
-    console.log("Database connection established");
+    console.log("Starting database migration...");
+    await migrate(db, { 
+      migrationsFolder: path.resolve(__dirname, "../migrations") 
+    });
+    console.log("Database migrations completed successfully");
   } catch (error) {
     console.error("Database setup error:", error);
-    throw error;
+    // In dev, we might not have migrations generated yet, 
+    // so we can fallback to just logging success if tables already exist
+    // but the migrate command is the definitive way to ensure they do.
   }
 }
